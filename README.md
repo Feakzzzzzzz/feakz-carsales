@@ -4,6 +4,39 @@ Car Sale Script lets players sell their owned vehicles directly in the world usi
 
 The script is made for QB/QBX FiveM servers and uses ox resources for targeting, database access, and inventory support.
 
+
+
+## Features
+
+- Physical for-sale signs displayed on listed vehicles.
+- Seller and buyer ox_target options.
+- Seller details menu with phone number copy/save support.
+- Vehicle mod inspection.
+- Test drive support.
+- Negotiation and counter-offer flow.
+- Automatic bank payment transfer on sale.
+- Vehicle ownership transfer after purchase.
+- Configurable vehicle class and model blacklist.
+- Motorcycle and bicycle sign placement support.
+
+## Performance
+
+The script is well optimized, with a low idle usage of `0.00ms` when away from vehicles for sale.
+
+With 4 DUI sale signs loaded nearby, idle usage is typically around `0.04ms - 0.06ms`.
+
+## Preview
+
+![Car sale signs showcase](https://i.8upload.com/image/582e7bfa5a55551f/desktop-screenshot-2026-08-15-19-26-32-34.png)
+
+## How To
+
+1. Use the sale sign item next to a registered vehicle.
+2. Enter the desired sale price and confirm the listing.
+3. The owner can offer the vehicle to a nearby buyer.
+4. The buyer can accept the listed price or negotiate a counter offer.
+5. When accepted, funds are deducted from the buyer and transferred to the owner.
+
 ## Requirements
 
 - `qb-core`

@@ -163,22 +163,37 @@ local function playerNearListing(src, listing, distance)
     return CarSale.VectorDistance(coords, GetEntityCoords(vehicle)) <= distance
 end
 
-local function getDefaultSignSize()
-    local base = Config.Sign.placement.baseSize
-    local scale = tonumber(Config.Sign.placement.scale) or 1.0
+local function getSignPlacementConfig(vehicle)
+    local placement = Config.Sign.placement
+    local override
+
+    if vehicle and vehicle ~= 0 and GetVehicleClass then
+        local class = GetVehicleClass(vehicle)
+        override = CarSale.GetVehicleClassConfig(placement.classOverrides, class)
+    end
+
+    return override or placement
+end
+
+local function getDefaultSignSize(placement)
+    placement = placement or Config.Sign.placement
+    local base = placement.baseSize or Config.Sign.placement.baseSize
+    local scale = tonumber(placement.scale or Config.Sign.placement.scale) or 1.0
     return base.x * scale, base.y * scale
 end
 
-local function getDefaultSignPlacement()
-    local width, height = getDefaultSignSize()
+local function getDefaultSignPlacement(vehicle)
+    local placement = getSignPlacementConfig(vehicle)
+    local width, height = getDefaultSignSize(placement)
+    local offset = placement.offset or Config.Sign.placement.offset
 
     return {
-        x = Config.Sign.placement.offset.x,
-        y = Config.Sign.placement.offset.y,
-        z = Config.Sign.placement.offset.z,
+        x = offset.x,
+        y = offset.y,
+        z = offset.z,
         width = width,
         height = height,
-        tilt = Config.Sign.placement.tilt
+        tilt = placement.tilt or Config.Sign.placement.tilt
     }
 end
 
@@ -192,8 +207,8 @@ local function clampPlacementValue(value, range, fallback)
     return centimeters / 100.0
 end
 
-local function sanitizeSignPlacement(raw)
-    local base = getDefaultSignPlacement()
+local function sanitizeSignPlacement(raw, vehicle)
+    local base = getDefaultSignPlacement(vehicle)
     local ranges = Config.Sign.adjustment
 
     raw = type(raw) == 'table' and raw or {}
@@ -259,7 +274,7 @@ local function registerListedVehicleStorageHook()
             if not isListedVehicleStorage(payload) then return end
 
             if payload.source then
-                CarSale.Notify(payload.source, Config.Notifications.title, 'Vehicle storage is locked while listed for sale.', 'error')
+                --CarSale.Notify(payload.source, Config.Notifications.title, 'Vehicle storage is locked while listed for sale.', 'error')
             end
 
             return false
@@ -469,6 +484,19 @@ local function refreshSellerSource(src, listing)
     return false
 end
 
+local function canManageListing(src, listing)
+    return refreshSellerSource(src, listing)
+end
+
+local function canUseBuyerListingAction(src, listing)
+    return listing ~= nil and Bridge.GetIdentifier(src) ~= nil
+end
+
+local function offerSellerCanManage(offer, listing)
+    if not offer or not listing then return false end
+    return sellerOwnsListing(offer.sellerSrc, listing)
+end
+
 local function findSellerSource(identifier)
     if not identifier then return nil end
     local player = Bridge.GetPlayerByIdentifier(identifier)
@@ -487,11 +515,10 @@ local function refreshListingRoles()
 
     for token, offer in pairs(pendingOffers) do
         local listing = listings[offer.listingId]
-        local sellerIdentifier = offer.sellerSrc and Bridge.GetIdentifier(offer.sellerSrc) or nil
         local buyerIdentifier = offer.buyerSrc and Bridge.GetIdentifier(offer.buyerSrc) or nil
 
         if not listing
-            or sellerIdentifier ~= listing.sellerIdentifier
+            or not offerSellerCanManage(offer, listing)
             or buyerIdentifier ~= offer.buyerIdentifier then
             pendingOffers[token] = nil
         end
@@ -578,7 +605,7 @@ local function releaseListingReservation(plate, netId, keepDatabaseLock)
     end
 end
 
-RegisterNetEvent('car-sales:server:createListing', function(vehicleNetId, price)
+RegisterNetEvent('car-sales:server:createListing', function(vehicleNetId, price, clientProps)
     local src = source
     if rateLimited(src, 'createListing') then return end
     if not schemaReady then
@@ -661,12 +688,14 @@ RegisterNetEvent('car-sales:server:createListing', function(vehicleNetId, price)
         return
     end
 
-    local model = row[Config.Database.modelColumn] or tostring(GetEntityModel(vehicle))
-    if CarSale.TableContains(Config.Listing.vehicleBlacklist, model) then
+    local modelHash = GetEntityModel(vehicle)
+    local model = row[Config.Database.modelColumn] or tostring(modelHash)
+    if CarSale.TableContainsVehicleModel(Config.Listing.vehicleBlacklist, model)
+        or CarSale.TableContainsVehicleModel(Config.Listing.vehicleBlacklist, modelHash) then
         abortListing('This vehicle cannot be listed.')
         return
     end
-    if GetVehicleClass and CarSale.TableContains(Config.Listing.classBlacklist, GetVehicleClass(vehicle)) then
+    if GetVehicleClass and CarSale.TableContainsVehicleClass(Config.Listing.classBlacklist, GetVehicleClass(vehicle)) then
         abortListing('This vehicle class cannot be listed.')
         return
     end
@@ -686,6 +715,18 @@ RegisterNetEvent('car-sales:server:createListing', function(vehicleNetId, price)
     end
 
     local props = readVehicleProps(row, originalPlate, model)
+    clientProps = CarSale.DecodeJson(clientProps, clientProps)
+    if type(clientProps) == 'table' then
+        local clientPlate = CarSale.NormalizePlate(clientProps.plate)
+        if clientPlate == '' or clientPlate == originalPlate then
+            clientProps.plate = originalPlate
+            clientProps.model = clientProps.model or model
+            props = clientProps
+        else
+            CarSale.Debug(('Ignored listing props with mismatched plate %s for %s.'):format(clientPlate, originalPlate))
+        end
+    end
+
     local sellerName = Bridge.GetName(src)
     local sellerFirstName = Bridge.GetFirstName(src)
     local insertId = MySQL.insert.await([[
@@ -725,7 +766,7 @@ RegisterNetEvent('car-sales:server:createListing', function(vehicleNetId, price)
         modelHash = GetEntityModel(vehicle),
         props = props,
         price = price,
-        signPlacement = getDefaultSignPlacement(),
+        signPlacement = nil,
         consumedSign = Config.Inventory.consumeSign,
         purchasing = false,
         stateRevision = 1,
@@ -747,9 +788,9 @@ end)
 lib.callback.register('car-sales:server:getSignPlacement', function(src, listingId)
     local listing = listings[tonumber(listingId)]
     if not listing or not playerNearListing(src, listing, Config.Listing.targetDistance + 2.0) then return nil end
-    if not refreshSellerSource(src, listing) then return nil end
+    if not canManageListing(src, listing) then return nil end
 
-    return listing.signPlacement or getDefaultSignPlacement()
+    return listing.signPlacement or getDefaultSignPlacement(getNetEntity(listing.vehicleNetId))
 end)
 
 RegisterNetEvent('car-sales:server:updateSignPlacement', function(listingId, placement)
@@ -761,7 +802,7 @@ RegisterNetEvent('car-sales:server:updateSignPlacement', function(listingId, pla
         CarSale.Notify(src, Config.Notifications.title, 'This vehicle is no longer listed.', 'error')
         return
     end
-    if not refreshSellerSource(src, listing) then
+    if not canManageListing(src, listing) then
         CarSale.Notify(src, Config.Notifications.title, 'Only the owner can adjust this sign.', 'error')
         return
     end
@@ -770,7 +811,7 @@ RegisterNetEvent('car-sales:server:updateSignPlacement', function(listingId, pla
         return
     end
 
-    listing.signPlacement = sanitizeSignPlacement(placement)
+    listing.signPlacement = sanitizeSignPlacement(placement, getNetEntity(listing.vehicleNetId))
     listing.stateRevision = (listing.stateRevision or 1) + 1
 
     local vehicle = getNetEntity(listing.vehicleNetId)
@@ -784,7 +825,7 @@ end)
 lib.callback.register('car-sales:server:getSellerDetails', function(src, listingId)
     local listing = listings[tonumber(listingId)]
     if not listing or not playerNearListing(src, listing, Config.Listing.targetDistance + 2.0) then return nil end
-    if refreshSellerSource(src, listing) then return nil end
+    if not canUseBuyerListingAction(src, listing) then return nil end
 
     local phone = listing.sellerPhone
     if not phone or phone == 'Unknown' then
@@ -806,6 +847,17 @@ lib.callback.register('car-sales:server:getSellerDetails', function(src, listing
     }
 end)
 
+lib.callback.register('car-sales:server:getVehicleMods', function(src, listingId)
+    local listing = listings[tonumber(listingId)]
+    if not listing or not playerNearListing(src, listing, Config.Listing.targetDistance + 2.0) then return nil end
+
+    return {
+        vehicle = CarSale.VehicleDisplayName(listing.model),
+        model = listing.model,
+        props = listing.props
+    }
+end)
+
 RegisterNetEvent('car-sales:server:saveSellerContact', function(listingId)
     local src = source
     if rateLimited(src, 'saveSellerContact') then return end
@@ -820,7 +872,7 @@ RegisterNetEvent('car-sales:server:saveSellerContact', function(listingId)
         CarSale.Notify(src, Config.Notifications.title, 'You are too far from the vehicle.', 'error')
         return
     end
-    if refreshSellerSource(src, listing) then
+    if not canUseBuyerListingAction(src, listing) then
         CarSale.Notify(src, Config.Notifications.title, 'You cannot save your own listing contact.', 'error')
         return
     end
@@ -852,7 +904,7 @@ end)
 lib.callback.register('car-sales:server:getListing', function(src, listingId)
     local listing = listings[tonumber(listingId)]
     if not listing or not playerNearListing(src, listing, Config.Listing.targetDistance + 2.0) then return nil end
-    local seller = refreshSellerSource(src, listing)
+    local seller = canManageListing(src, listing)
 
     return {
         id = listing.id,
@@ -873,7 +925,7 @@ RegisterNetEvent('car-sales:server:updateListingPrice', function(listingId, pric
         CarSale.Notify(src, Config.Notifications.title, 'This vehicle is no longer listed.', 'error')
         return
     end
-    if not refreshSellerSource(src, listing) then
+    if not canManageListing(src, listing) then
         CarSale.Notify(src, Config.Notifications.title, 'Only the owner can edit this listing.', 'error')
         return
     end
@@ -931,7 +983,7 @@ RegisterNetEvent('car-sales:server:cancelListing', function(listingId)
         CarSale.Notify(src, Config.Notifications.title, 'This vehicle is no longer listed.', 'error')
         return
     end
-    if not refreshSellerSource(src, listing) then
+    if not canManageListing(src, listing) then
         CarSale.Notify(src, Config.Notifications.title, 'Only the owner can remove this listing.', 'error')
         return
     end
@@ -951,10 +1003,6 @@ RegisterNetEvent('car-sales:server:startTestDrive', function(listingId, jgMechan
     local listing = listings[tonumber(listingId)]
     if not listing then
         CarSale.Notify(src, Config.Notifications.title, 'This vehicle is no longer available.', 'error')
-        return
-    end
-    if Bridge.GetIdentifier(src) == listing.sellerIdentifier then
-        CarSale.Notify(src, Config.Notifications.title, 'You cannot test drive your own listing.', 'error')
         return
     end
     if activeTestDrives[src] then
@@ -1157,7 +1205,7 @@ RegisterNetEvent('car-sales:server:offerPurchase', function(listingId)
         CarSale.Notify(src, Config.Notifications.title, 'This vehicle is no longer listed.', 'error')
         return
     end
-    if not refreshSellerSource(src, listing) then
+    if not canManageListing(src, listing) then
         CarSale.Notify(src, Config.Notifications.title, 'Only the owner can offer this vehicle for sale.', 'error')
         return
     end
@@ -1189,7 +1237,7 @@ end)
 AddEventHandler('car-sales:server:sendOfferToBuyer', function(listingId, buyerSrc, sellerSrc)
     local listing = listings[tonumber(listingId)]
     if not listing or not buyerSrc or not sellerSrc then return end
-    if not refreshSellerSource(sellerSrc, listing) then return end
+    if not canManageListing(sellerSrc, listing) then return end
     if Bridge.GetIdentifier(buyerSrc) == listing.sellerIdentifier then return end
     if not playerNearListing(sellerSrc, listing, Config.Listing.offerDistance + 2.0) then return end
     if not playerNearListing(buyerSrc, listing, Config.Listing.offerDistance + 2.0) then
@@ -1249,7 +1297,7 @@ RegisterNetEvent('car-sales:server:negotiateOffer', function(token, counterAmoun
         CarSale.Notify(src, Config.Notifications.title, 'Seller is no longer available.', 'error')
         return
     end
-    if not sellerOwnsListing(offer.sellerSrc, listing) then
+    if not offerSellerCanManage(offer, listing) then
         CarSale.Notify(src, Config.Notifications.title, 'Seller no longer owns this vehicle.', 'error')
         return
     end
@@ -1297,7 +1345,7 @@ RegisterNetEvent('car-sales:server:respondNegotiation', function(token, accepted
         return
     end
 
-    if not refreshSellerSource(src, listing) then return end
+    if not canManageListing(src, listing) then return end
 
     if not accepted then
         pendingOffers[token] = nil
@@ -1459,7 +1507,7 @@ RegisterNetEvent('car-sales:server:respondOffer', function(token, accepted)
         if sellerOnline then CarSale.Notify(offer.sellerSrc, Config.Notifications.title, message, 'error') end
     end
 
-    if not sellerOnline or not sellerOwnsListing(offer.sellerSrc, listing) then
+    if not sellerOnline or not offerSellerCanManage(offer, listing) then
         fail('Seller is no longer available.')
         return
     end

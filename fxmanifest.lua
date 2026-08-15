@@ -1,7 +1,7 @@
 fx_version 'cerulean'
 game 'gta5'
 
-author 'Codex'
+author 'Feakz'
 description 'Physical player-to-player vehicle sale signs'
 version '1.1.3'
 

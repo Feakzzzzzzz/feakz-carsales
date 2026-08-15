@@ -145,11 +145,9 @@ Config.Listing = applyDefaults(Config.Listing, {
     vehicleCare = {
         keepClean = true,
         keepWindowsFixed = true,
-        fixBodyDamage = true,
-        preserveHealth = true,
         preventDisplayDamage = true,
         distance = 60.0,
-        intervalMs = 1000,
+        intervalMs = 5000,
         farIntervalMs = 5000,
         cleanThreshold = 0.1,
         fullRefreshMs = 10000
@@ -186,7 +184,23 @@ Config.Sign = applyDefaults(Config.Sign, {
         offset = vec3(0.0, 0.0, 0.0),
         baseSize = vec2(0.59, 0.27),
         scale = 1.0,
-        tilt = 0.08
+        tilt = 0.08,
+        classOverrides = {
+            ['Motorcycles'] = {
+                anchorBones = { 'wheel_f', 'wheel_lf', 'wheel_rf', 'forks_f' },
+                fallbackAnchor = vec3(0.0, 1.05, 0.32),
+                offset = vec3(0.0, 0.35, 0.0),
+                baseSize = vec2(0.42, 0.2),
+                tilt = 0.08
+            },
+            ['Cycles'] = {
+                anchorBones = { 'wheel_f', 'wheel_lf', 'wheel_rf', 'forks_f' },
+                fallbackAnchor = vec3(0.0, 1.0, 0.3),
+                offset = vec3(0.0, 0.35, 0.0),
+                baseSize = vec2(0.42, 0.2),
+                tilt = 0.08
+            }
+        }
     },
     adjustment = {
         x = { min = -120, max = 120 },

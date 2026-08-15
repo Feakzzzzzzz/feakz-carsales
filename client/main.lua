@@ -10,6 +10,7 @@ local duiPoolRetryAt = 0
 local duiDrawThread = false
 local saleBlips = {}
 local saleVehicles = {}
+local saleTargetEntities = {}
 local saleDoorStates = {}
 local saleCareState = {}
 local saleProtectionStates = {}
@@ -27,6 +28,8 @@ local runtimeMetrics = {
     vehicleScans = 0,
     carePasses = 0
 }
+local registerSaleVehicleTarget
+local unregisterSaleVehicleTarget
 
 local function clamp(value, minValue, maxValue)
     if value < minValue then return minValue end
@@ -386,11 +389,6 @@ local function restoreDoorState(vehicle, state)
     end
 end
 
-local function canRepairSaleVehicle(vehicle)
-    if not NetworkGetEntityIsNetworked or not NetworkGetEntityIsNetworked(vehicle) then return true end
-    return not NetworkHasControlOfEntity or NetworkHasControlOfEntity(vehicle)
-end
-
 local function maintainSalePresentation(vehicle, force)
     if not DoesEntityExist(vehicle) then return end
     local now = GetGameTimer()
@@ -409,24 +407,6 @@ local function maintainSalePresentation(vehicle, force)
             WashDecalsFromVehicle(vehicle, 1.0)
             RemoveDecalsFromVehicle(vehicle)
         end
-    end
-
-    if fullRefresh and Config.Listing.vehicleCare.fixBodyDamage and canRepairSaleVehicle(vehicle) then
-        local openDoors = captureDoorState(vehicle)
-        local bodyHealth = GetVehicleBodyHealth(vehicle)
-        local engineHealth = GetVehicleEngineHealth(vehicle)
-        local tankHealth = GetVehiclePetrolTankHealth(vehicle)
-
-        if SetVehicleFixed then SetVehicleFixed(vehicle) end
-        if SetVehicleDeformationFixed then SetVehicleDeformationFixed(vehicle) end
-
-        if Config.Listing.vehicleCare.preserveHealth then
-            SetVehicleBodyHealth(vehicle, bodyHealth)
-            SetVehicleEngineHealth(vehicle, engineHealth)
-            SetVehiclePetrolTankHealth(vehicle, tankHealth)
-        end
-
-        restoreDoorState(vehicle, openDoors)
     end
 
     if fullRefresh and Config.Listing.vehicleCare.keepWindowsFixed then
@@ -558,9 +538,22 @@ local function getDuiScanInterval(scanState)
     return far
 end
 
-local function getDefaultSignSize()
-    local base = Config.Sign.placement.baseSize
-    local scale = tonumber(Config.Sign.placement.scale) or 1.0
+local function getSignPlacementConfig(entity)
+    local placement = Config.Sign.placement
+    local override
+
+    if entity and entity ~= 0 and DoesEntityExist(entity) and GetVehicleClass then
+        local class = GetVehicleClass(entity)
+        override = CarSale.GetVehicleClassConfig(placement.classOverrides, class)
+    end
+
+    return override or placement
+end
+
+local function getDefaultSignSize(placement)
+    placement = placement or Config.Sign.placement
+    local base = placement.baseSize or Config.Sign.placement.baseSize
+    local scale = tonumber(placement.scale or Config.Sign.placement.scale) or 1.0
     return base.x * scale, base.y * scale
 end
 
@@ -745,26 +738,29 @@ end
 local function getDuiPlacement(entity)
     local data = getSaleData(entity)
     local placement = data and data.placement or nil
-    local width, height = getDefaultSignSize()
+    local placementConfig = getSignPlacementConfig(entity)
+    local width, height = getDefaultSignSize(placementConfig)
+    local offset = placementConfig.offset or Config.Sign.placement.offset
+    local tilt = placementConfig.tilt or Config.Sign.placement.tilt
 
     if type(placement) ~= 'table' then
         return {
-            x = Config.Sign.placement.offset.x,
-            y = Config.Sign.placement.offset.y,
-            z = Config.Sign.placement.offset.z,
+            x = offset.x,
+            y = offset.y,
+            z = offset.z,
             width = width,
             height = height,
-            tilt = Config.Sign.placement.tilt
+            tilt = tilt
         }
     end
 
     return {
-        x = tonumber(placement.x) or Config.Sign.placement.offset.x,
-        y = tonumber(placement.y) or Config.Sign.placement.offset.y,
-        z = tonumber(placement.z) or Config.Sign.placement.offset.z,
+        x = tonumber(placement.x) or offset.x,
+        y = tonumber(placement.y) or offset.y,
+        z = tonumber(placement.z) or offset.z,
         width = tonumber(placement.width) or width,
         height = tonumber(placement.height) or height,
-        tilt = tonumber(placement.tilt) or Config.Sign.placement.tilt
+        tilt = tonumber(placement.tilt) or tilt
     }
 end
 
@@ -781,8 +777,8 @@ local function getEntityBasis(entity)
     }
 end
 
-local function getDuiAnchorCoords(entity)
-    local placement = Config.Sign.placement
+local function getDuiAnchorCoords(entity, placementConfig)
+    local placement = placementConfig or getSignPlacementConfig(entity)
     if type(placement.anchorBones) == 'table' then
         local model = GetEntityModel(entity)
         local boneIndex = duiAnchorBoneCache[model]
@@ -823,7 +819,7 @@ end
 local function getDuiGeometry(entity, placement)
     placement = placement or getDuiPlacement(entity)
 
-    local anchorCoords = getDuiAnchorCoords(entity)
+    local anchorCoords = getDuiAnchorCoords(entity, getSignPlacementConfig(entity))
     local basis = getEntityBasis(entity)
     local halfWidth = placement.width * 0.5
     local halfHeight = placement.height * 0.5
@@ -989,10 +985,12 @@ local function trackSaleVehicle(entity, data)
     if not data then return false end
 
     saleVehicles[entity] = data
+    if registerSaleVehicleTarget then registerSaleVehicleTarget(entity) end
     return true
 end
 
 local function untrackSaleVehicle(entity)
+    if unregisterSaleVehicleTarget then unregisterSaleVehicleTarget(entity) end
     if DoesEntityExist(entity) then restoreSaleDamageProtection(entity) end
     saleProtectionStates[entity] = nil
     saleVehicles[entity] = nil
@@ -1011,7 +1009,7 @@ local function discoverSaleVehicles()
     for _, vehicle in ipairs(GetGamePool('CVehicle')) do
         local data = readSaleData(vehicle)
         if data then
-            saleVehicles[vehicle] = data
+            trackSaleVehicle(vehicle, data)
             seen[vehicle] = true
         elseif saleVehicles[vehicle] then
             untrackSaleVehicle(vehicle)
@@ -1121,7 +1119,7 @@ local function getTargetSaleState(entity)
         return targetStateCache.data
     end
 
-    local data = getSaleData(entity)
+    local data = saleVehicles[entity]
 
     targetStateCache.entity = entity
     targetStateCache.expiresAt = now + 250
@@ -1141,16 +1139,6 @@ end
 local function getListingId(entity)
     local state = getTargetSaleState(entity)
     return state and state.listingId or nil
-end
-
-local function isSeller(entity)
-    local state = getTargetSaleState(entity)
-    return state and state.carSale and state.seller == GetPlayerServerId(PlayerId())
-end
-
-local function isBuyer(entity)
-    local state = getTargetSaleState(entity)
-    return state and state.carSale and state.seller ~= GetPlayerServerId(PlayerId())
 end
 
 local function metersToCentimeters(value)
@@ -1249,7 +1237,186 @@ local function formatUpgradeLevel(value)
 end
 
 local function formatTurbo(value)
-    return value and 'Installed' or 'Stock'
+    return value and 'Yes' or 'No'
+end
+
+local function formatArmour(value)
+    local level = tonumber(value)
+    if not level or level < 0 then return 'None' end
+
+    local labels = {
+        [0] = '20%',
+        [1] = '40%',
+        [2] = '60%',
+        [3] = '80%',
+        [4] = '100%'
+    }
+
+    return labels[math.floor(level)] or '100%'
+end
+
+local function parseToggleValue(value)
+    if value == nil then return nil end
+    if type(value) == 'boolean' then return value end
+    if value == 'true' then return true end
+    if value == 'false' then return false end
+
+    local number = tonumber(value)
+    if number ~= nil then return number > 0 end
+
+    return nil
+end
+
+local function normalizeVehicleProps(props)
+    if type(props) == 'string' then
+        props = CarSale.DecodeJson(props, nil)
+    end
+
+    if type(props) ~= 'table' then return nil end
+
+    if type(props.props) == 'table' then
+        props = props.props
+    elseif type(props.vehicleProps) == 'table' then
+        props = props.vehicleProps
+    elseif type(props.properties) == 'table' then
+        props = props.properties
+    end
+
+    if type(props.mods) == 'string' then
+        props.mods = CarSale.DecodeJson(props.mods, props.mods)
+    end
+
+    return props
+end
+
+local function getSavedModValue(props, modType, ...)
+    props = normalizeVehicleProps(props)
+    if not props then return nil end
+
+    if type(props.mods) == 'table' then
+        local value = props.mods[modType]
+        if value == nil then value = props.mods[tostring(modType)] end
+        if value == nil then value = props.mods[modType + 1] end
+        if value ~= nil then return value end
+
+        for i = 1, select('#', ...) do
+            local key = select(i, ...)
+            if props.mods[key] ~= nil then return props.mods[key] end
+        end
+    end
+
+    local value = props[modType]
+    if value == nil then value = props[tostring(modType)] end
+    if value == nil then value = props[modType + 1] end
+    if value ~= nil then return value end
+
+    for i = 1, select('#', ...) do
+        local key = select(i, ...)
+        if props[key] ~= nil then return props[key] end
+    end
+
+    return nil
+end
+
+local function getSavedToggleValue(props, ...)
+    props = normalizeVehicleProps(props)
+    if not props then return nil end
+
+    if type(props.mods) == 'table' then
+        for i = 1, select('#', ...) do
+            local key = select(i, ...)
+            local parsed = parseToggleValue(props.mods[key])
+            if parsed ~= nil then return parsed end
+        end
+    end
+
+    for i = 1, select('#', ...) do
+        local key = select(i, ...)
+        local parsed = parseToggleValue(props[key])
+        if parsed ~= nil then return parsed end
+    end
+
+    return nil
+end
+
+local function getSavedVehicleModSummary(data)
+    if type(data) ~= 'table' then return nil end
+
+    local props = normalizeVehicleProps(data.props)
+    if not props then return nil end
+
+    local engine = getSavedModValue(props, 11, 'modEngine', 'engine')
+    local brakes = getSavedModValue(props, 12, 'modBrakes', 'brakes')
+    local turbo = getSavedToggleValue(props, 'modTurbo', 'turbo')
+    local transmission = getSavedModValue(props, 13, 'modTransmission', 'transmission')
+    local suspension = getSavedModValue(props, 15, 'modSuspension', 'suspension')
+    local armor = getSavedModValue(props, 16, 'modArmor', 'modArmour', 'armor', 'armour')
+
+    if engine == nil
+        and brakes == nil
+        and turbo == nil
+        and transmission == nil
+        and suspension == nil
+        and armor == nil then
+        return nil
+    end
+
+    return {
+        vehicle = data.vehicle or CarSale.VehicleDisplayName(props.model or data.model),
+        mods = {
+            {
+                label = 'Engine',
+                value = formatUpgradeLevel(engine)
+            },
+            {
+                label = 'Transmission',
+                value = formatUpgradeLevel(transmission)
+            },
+            {
+                label = 'Brakes',
+                value = formatUpgradeLevel(brakes)
+            },
+            {
+                label = 'Suspension',
+                value = formatUpgradeLevel(suspension)
+            },
+            {
+                label = 'Armor',
+                value = formatArmour(armor)
+            },
+            {
+                label = 'Turbo',
+                value = formatTurbo(turbo)
+            }
+        }
+    }
+end
+
+local function hasDisplayedUpgrades(summary)
+    if not summary or type(summary.mods) ~= 'table' then return false end
+
+    for _, mod in ipairs(summary.mods) do
+        local value = mod and mod.value
+        if value and value ~= 'Stock' and value ~= 'No' and value ~= 'None' then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function pickVehicleModSummary(...)
+    local fallback
+
+    for i = 1, select('#', ...) do
+        local summary = select(i, ...)
+        if summary and type(summary.mods) == 'table' then
+            fallback = fallback or summary
+            if hasDisplayedUpgrades(summary) then return summary end
+        end
+    end
+
+    return fallback
 end
 
 local function getLiveVehicleModSummary(vehicle)
@@ -1265,24 +1432,24 @@ local function getLiveVehicleModSummary(vehicle)
                 value = formatUpgradeLevel(GetVehicleMod(vehicle, 11))
             },
             {
-                label = 'Brakes',
-                value = formatUpgradeLevel(GetVehicleMod(vehicle, 12))
-            },
-            {
-                label = 'Turbo',
-                value = formatTurbo(IsToggleModOn(vehicle, 18))
-            },
-            {
                 label = 'Transmission',
                 value = formatUpgradeLevel(GetVehicleMod(vehicle, 13))
+            },
+            {
+                label = 'Brakes',
+                value = formatUpgradeLevel(GetVehicleMod(vehicle, 12))
             },
             {
                 label = 'Suspension',
                 value = formatUpgradeLevel(GetVehicleMod(vehicle, 15))
             },
             {
-                label = 'Armour',
-                value = formatUpgradeLevel(GetVehicleMod(vehicle, 16))
+                label = 'Armor',
+                value = formatArmour(GetVehicleMod(vehicle, 16))
+            },
+            {
+                label = 'Turbo',
+                value = formatTurbo(IsToggleModOn(vehicle, 18))
             }
         }
     }
@@ -1292,7 +1459,16 @@ local function openVehicleModsMenu(entity)
     local listingId = getListingId(entity)
     if not listingId then return end
 
-    local summary = getLiveVehicleModSummary(entity)
+    local saved = lib.callback.await('car-sales:server:getVehicleMods', false, listingId)
+    local liveVehicleName = CarSale.VehicleDisplayName(GetEntityModel(entity))
+    local jgProps = getJgMechanicTestDriveProps(entity)
+    local currentProps = CarSale.GetVehicleProperties(entity)
+    local summary = pickVehicleModSummary(
+        getSavedVehicleModSummary(saved),
+        getSavedVehicleModSummary({ vehicle = liveVehicleName, props = jgProps }),
+        getSavedVehicleModSummary({ vehicle = liveVehicleName, props = currentProps }),
+        getLiveVehicleModSummary(entity)
+    )
     if not summary or type(summary.mods) ~= 'table' then
         notify('Vehicle mods are no longer available.', 'error')
         return
@@ -1341,19 +1517,22 @@ local function openEditListingMenu(entity)
     TriggerServerEvent('car-sales:server:updateListingPrice', listingId, input[1])
 end
 
-local function registerTargets()
-    if targetRegistered or GetResourceState('ox_target') ~= 'started' then return end
-    targetRegistered = true
+local saleTargetOptionNames = {
+    'car_sales_details',
+    'car_sales_inspect_mods',
+    'car_sales_testdrive',
+    'car_sales_offer',
+    'car_sales_edit',
+    'car_sales_adjust_sign',
+    'car_sales_cancel'
+}
 
-    exports.ox_target:addGlobalVehicle({
+local buyerSaleTargetOptions = {
         {
             name = 'car_sales_details',
             icon = Config.TargetIcons.details,
             label = 'Seller Details',
             distance = Config.Listing.targetDistance,
-            canInteract = function(entity)
-                return isBuyer(entity)
-            end,
             onSelect = function(data)
                 local listingId = getListingId(data.entity)
                 if not listingId then return end
@@ -1421,41 +1600,40 @@ local function registerTargets()
             end
         },
         {
-            name = 'car_sales_inspect_mods',
-            icon = Config.TargetIcons.inspect,
-            label = 'Inspect Mods',
-            distance = Config.Listing.targetDistance,
-            canInteract = function(entity)
-                local state = getTargetSaleState(entity)
-                return state and state.carSale
-            end,
-            onSelect = function(data)
-                openVehicleModsMenu(data.entity)
-            end
-        },
-        {
             name = 'car_sales_testdrive',
             icon = Config.TargetIcons.testDrive,
             label = 'Test Drive Vehicle',
             distance = Config.Listing.targetDistance,
-            canInteract = function(entity)
-                return isBuyer(entity) and not testDrive
-            end,
             onSelect = function(data)
+                if testDrive then
+                    notify('You are already in a test drive.', 'error')
+                    return
+                end
                 local listingId = getListingId(data.entity)
                 if listingId then
                     TriggerServerEvent('car-sales:server:startTestDrive', listingId, getJgMechanicTestDriveProps(data.entity))
                 end
             end
+        }
+    }
+
+local sellerSaleTargetOptions = {
+        buyerSaleTargetOptions[1],
+        {
+            name = 'car_sales_inspect_mods',
+            icon = Config.TargetIcons.inspect,
+            label = 'Inspect Mods',
+            distance = Config.Listing.targetDistance,
+            onSelect = function(data)
+                openVehicleModsMenu(data.entity)
+            end
         },
+        buyerSaleTargetOptions[2],
         {
             name = 'car_sales_offer',
             icon = Config.TargetIcons.offer,
             label = 'Offer Purchase',
             distance = Config.Listing.targetDistance,
-            canInteract = function(entity)
-                return isSeller(entity)
-            end,
             onSelect = function(data)
                 local listingId = getListingId(data.entity)
                 if listingId then TriggerServerEvent('car-sales:server:offerPurchase', listingId) end
@@ -1466,9 +1644,6 @@ local function registerTargets()
             icon = Config.TargetIcons.edit or Config.TargetIcons.view,
             label = 'Edit Listing',
             distance = Config.Listing.targetDistance,
-            canInteract = function(entity)
-                return isSeller(entity)
-            end,
             onSelect = function(data)
                 openEditListingMenu(data.entity)
             end
@@ -1478,9 +1653,6 @@ local function registerTargets()
             icon = Config.TargetIcons.adjust,
             label = 'Adjust Sale Sign',
             distance = Config.Listing.targetDistance,
-            canInteract = function(entity)
-                return isSeller(entity)
-            end,
             onSelect = function(data)
                 openSignPlacementMenu(data.entity)
             end
@@ -1490,9 +1662,6 @@ local function registerTargets()
             icon = Config.TargetIcons.cancel,
             label = 'Remove From Sale',
             distance = Config.Listing.targetDistance,
-            canInteract = function(entity)
-                return isSeller(entity)
-            end,
             onSelect = function(data)
                 local listingId = getListingId(data.entity)
                 if not listingId then return end
@@ -1508,7 +1677,58 @@ local function registerTargets()
                 end
             end
         }
-    })
+    }
+
+registerSaleVehicleTarget = function(entity)
+    if not targetRegistered
+        or not entity
+        or entity == 0
+        or not DoesEntityExist(entity)
+        or GetResourceState('ox_target') ~= 'started' then
+        return
+    end
+
+    local state = saleVehicles[entity]
+    if not state then return end
+
+    local role = state.seller == GetPlayerServerId(PlayerId()) and 'seller' or 'buyer'
+    if saleTargetEntities[entity] == role then return end
+
+    if saleTargetEntities[entity] then
+        pcall(function()
+            exports.ox_target:removeLocalEntity(entity, saleTargetOptionNames)
+        end)
+        saleTargetEntities[entity] = nil
+    end
+
+    local options = role == 'seller' and sellerSaleTargetOptions or buyerSaleTargetOptions
+    local ok = pcall(function()
+        exports.ox_target:addLocalEntity(entity, options)
+    end)
+
+    if ok then
+        saleTargetEntities[entity] = role
+    end
+end
+
+unregisterSaleVehicleTarget = function(entity)
+    if not saleTargetEntities[entity] then return end
+    saleTargetEntities[entity] = nil
+
+    if GetResourceState('ox_target') ~= 'started' then return end
+
+    pcall(function()
+        exports.ox_target:removeLocalEntity(entity, saleTargetOptionNames)
+    end)
+end
+
+local function registerTargets()
+    if targetRegistered or GetResourceState('ox_target') ~= 'started' then return end
+    targetRegistered = true
+
+    for entity in pairs(saleVehicles) do
+        registerSaleVehicleTarget(entity)
+    end
 end
 
 RegisterNetEvent('car-sales:client:useSign', function()
@@ -1530,7 +1750,12 @@ RegisterNetEvent('car-sales:client:useSign', function()
         return
     end
 
-    if CarSale.TableContains(Config.Listing.classBlacklist, GetVehicleClass(vehicle)) then
+    if CarSale.TableContainsVehicleModel(Config.Listing.vehicleBlacklist, GetEntityModel(vehicle)) then
+        notify('This vehicle cannot be listed.', 'error')
+        return
+    end
+
+    if CarSale.TableContainsVehicleClass(Config.Listing.classBlacklist, GetVehicleClass(vehicle)) then
         notify('This vehicle class cannot be listed.', 'error')
         return
     end
@@ -1553,7 +1778,7 @@ RegisterNetEvent('car-sales:client:useSign', function()
         return
     end
     SetNetworkIdCanMigrate(netId, true)
-    TriggerServerEvent('car-sales:server:createListing', netId, input[1])
+    TriggerServerEvent('car-sales:server:createListing', netId, input[1], CarSale.GetVehicleProperties(vehicle))
 end)
 
 RegisterNetEvent('car-sales:client:lockVehicle', function(netId)
@@ -1578,6 +1803,7 @@ end)
 RegisterNetEvent('car-sales:client:restoreVehicle', function(netId, plate, sold, buyerSrc)
     local vehicle = getNetEntity(netId)
     if vehicle and vehicle ~= 0 then
+        if unregisterSaleVehicleTarget then unregisterSaleVehicleTarget(vehicle) end
         saleVehicles[vehicle] = nil
         destroyDuiSign(vehicle)
         destroySaleBlip(vehicle)
@@ -1631,7 +1857,7 @@ AddStateBagChangeHandler('carSaleData', nil, function(bagName, _, value)
     if entity and entity ~= 0 and IsEntityAVehicle(entity) then
         local data = normalizeSaleData(value)
         if data then
-            saleVehicles[entity] = data
+            trackSaleVehicle(entity, data)
             clearTargetSaleState(entity)
             SetVehicleNumberPlateText(entity, getSaleDisplayPlate(entity))
 
@@ -1650,7 +1876,7 @@ end)
 
 local function runVehicleCare(snapshot)
     local care = Config.Listing.vehicleCare
-    if not care.keepClean and not care.keepWindowsFixed and not care.fixBodyDamage and not care.preventDisplayDamage then
+    if not care.keepClean and not care.keepWindowsFixed and not care.preventDisplayDamage then
         return false
     end
 
@@ -1762,93 +1988,80 @@ RegisterNetEvent('car-sales:client:chooseBuyer', function(listingId, candidates)
     local options = {}
     for _, buyer in ipairs(candidates) do
         options[#options + 1] = {
-            title = buyer.name,
-            description = ('Server ID: %s'):format(buyer.source),
-            onSelect = function()
-                TriggerServerEvent('car-sales:server:selectBuyer', listingId, buyer.source)
-            end
+            label = ('%s (%s)'):format(buyer.name, buyer.source),
+            value = buyer.source
         }
     end
 
-    lib.registerContext({
-        id = 'car_sales_choose_buyer',
-        title = 'Choose Buyer',
-        options = options
+    local input = lib.inputDialog('Choose Buyer', {
+        {
+            type = 'select',
+            label = 'Buyer',
+            options = options,
+            required = true
+        }
     })
-    lib.showContext('car_sales_choose_buyer')
+
+    if input and input[1] then
+        TriggerServerEvent('car-sales:server:selectBuyer', listingId, tonumber(input[1]))
+    end
 end)
 
 RegisterNetEvent('car-sales:client:purchasePrompt', function(token, offer)
-    lib.registerContext({
-        id = 'car_sales_purchase_prompt',
-        title = offer.negotiated and 'Negotiated Vehicle Offer' or 'Vehicle Purchase Offer',
-        options = {
-            {
-                title = 'Accept',
-                description = ('%s from %s for %s'):format(offer.vehicle, offer.seller, CarSale.FormatMoney(offer.price)),
-                icon = 'fa-solid fa-check',
-                onSelect = function()
-                    TriggerServerEvent('car-sales:server:respondOffer', token, true)
-                end
+    local input = lib.inputDialog(offer.negotiated and 'Negotiated Vehicle Offer' or 'Vehicle Purchase Offer', {
+        {
+            type = 'select',
+            label = ('%s from %s for %s'):format(offer.vehicle, offer.seller, CarSale.FormatMoney(offer.price)),
+            options = {
+                { label = 'Decline', value = 'decline' },
+                { label = 'Negotiate', value = 'negotiate' },
+                { label = 'Accept', value = 'accept' }
             },
-            {
-                title = 'Negotiate',
-                description = 'Send the seller a counter offer.',
-                icon = 'fa-solid fa-comments-dollar',
-                onSelect = function()
-                    local input = lib.inputDialog('Negotiate Price', {
-                        {
-                            type = 'number',
-                            label = 'Counter Offer',
-                            min = Config.Listing.minPrice,
-                            max = Config.Listing.maxPrice,
-                            default = offer.price,
-                            required = true
-                        }
-                    })
-
-                    if input and input[1] then
-                        TriggerServerEvent('car-sales:server:negotiateOffer', token, input[1])
-                    end
-                end
-            },
-            {
-                title = 'Decline',
-                description = 'Reject this purchase offer.',
-                icon = 'fa-solid fa-xmark',
-                onSelect = function()
-                    TriggerServerEvent('car-sales:server:respondOffer', token, false)
-                end
-            }
+            required = true
         }
     })
-    lib.showContext('car_sales_purchase_prompt')
+
+    if not input or not input[1] then return end
+
+    if input[1] == 'accept' then
+        TriggerServerEvent('car-sales:server:respondOffer', token, true)
+    elseif input[1] == 'decline' then
+        TriggerServerEvent('car-sales:server:respondOffer', token, false)
+    elseif input[1] == 'negotiate' then
+        local counter = lib.inputDialog('Negotiate Price', {
+            {
+                type = 'number',
+                label = 'Counter Offer',
+                min = Config.Listing.minPrice,
+                max = Config.Listing.maxPrice,
+                default = offer.price,
+                required = true
+            }
+        })
+
+        if counter and counter[1] then
+            TriggerServerEvent('car-sales:server:negotiateOffer', token, counter[1])
+        end
+    end
 end)
 
 RegisterNetEvent('car-sales:client:negotiationPrompt', function(token, offer)
-    lib.registerContext({
-        id = 'car_sales_negotiation_prompt',
-        title = 'Counter Offer',
-        options = {
-            {
-                title = 'Accept Counter',
-                description = ('%s offered %s for %s'):format(offer.buyer, CarSale.FormatMoney(offer.counterPrice), offer.vehicle),
-                icon = 'fa-solid fa-check',
-                onSelect = function()
-                    TriggerServerEvent('car-sales:server:respondNegotiation', token, true)
-                end
+    local input = lib.inputDialog('Counter Offer', {
+        {
+            type = 'select',
+            label = ('%s offered %s for %s'):format(offer.buyer, CarSale.FormatMoney(offer.counterPrice), offer.vehicle),
+            description = ('Original asking price: %s'):format(CarSale.FormatMoney(offer.askingPrice)),
+            options = {
+                { label = 'Accept Counter', value = 'accept' },
+                { label = 'Decline Counter', value = 'decline' }
             },
-            {
-                title = 'Decline Counter',
-                description = ('Original asking price: %s'):format(CarSale.FormatMoney(offer.askingPrice)),
-                icon = 'fa-solid fa-xmark',
-                onSelect = function()
-                    TriggerServerEvent('car-sales:server:respondNegotiation', token, false)
-                end
-            }
+            required = true
         }
     })
-    lib.showContext('car_sales_negotiation_prompt')
+
+    if not input or not input[1] then return end
+
+    TriggerServerEvent('car-sales:server:respondNegotiation', token, input[1] == 'accept')
 end)
 
 local function fadeOutForTestDrive()

@@ -1,6 +1,6 @@
 Config = {}
 
-Config.Debug = false
+Config.Debug = true
 
 Config.Framework = 'qb-core'
 Config.Inventory = 'ox_inventory'
@@ -44,7 +44,62 @@ Config.TestDrive = {
 
 Config.Listing = {
     minPrice = 100,
-    maxPrice = 10000000
+    maxPrice = 10000000,
+
+    --  List model names to disable it
+    vehicleBlacklist = {
+        -- 'rhino',
+        -- 'police'
+    },
+
+    -- Uncomment any class to disable it.
+    classBlacklist = {
+        -- 'Compacts',
+        -- 'Sedans',
+        -- 'SUVs',
+        -- 'Coupes',
+        -- 'Muscle',
+        -- 'Sports Classics',
+        -- 'Sports',
+        -- 'Super',
+        -- 'Motorcycles',
+        -- 'Off-road',
+         'Industrial',
+         'Utility',
+        -- 'Vans',
+         'Cycles',
+         'Boats',
+         'Helicopters',
+         'Planes',
+         'Service',
+         'Emergency',
+         'Military',
+         'Commercial',
+         'Trains',
+         'Open Wheel'
+    }
+}
+
+Config.Sign = {
+    placement = {
+        -- Per-class placement overrides. Use class names from Config.Listing.classBlacklist.
+        classOverrides = {
+            ['Motorcycles'] = {
+                anchorBones = { 'wheel_f', 'wheel_lf', 'wheel_rf', 'forks_f' },
+                fallbackAnchor = vec3(0.0, 1.05, 0.32),
+                offset = vec3(0.0, 0.35, 0.0),
+                baseSize = vec2(0.42, 0.2),
+                tilt = 0.05
+            },
+            ['Cycles'] = {
+                anchorBones = { 'wheel_f', 'wheel_lf', 'wheel_rf', 'forks_f' },
+                fallbackAnchor = vec3(0.0, 1.0, 0.3),
+                offset = vec3(0.0, 0.35, 0.0),
+                baseSize = vec2(0.42, 0.2),
+                tilt = 0.05
+            }
+        }
+    }
 }
 
 Config.Keys = {
