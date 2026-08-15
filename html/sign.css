@@ -1,0 +1,129 @@
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    font-family: Arial, Helvetica, sans-serif;
+    background: transparent;
+}
+
+body {
+    display: grid;
+    place-items: center;
+}
+
+body:not(.dui) .sign {
+    display: none;
+}
+
+.sign {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    padding: 7vh 5.5vw 6vh;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5vh;
+    background: #f21d20;
+    border: 2.3vh solid #f4f4f4;
+    border-radius: 3vh;
+    box-shadow:
+        inset 0 0 0 1.9vh rgba(255, 255, 255, 0.92),
+        inset 0 0 0 2.5vh rgba(210, 18, 22, 0.6);
+    color: #fff;
+}
+
+.sign::after {
+    content: "";
+    position: absolute;
+    inset: 4.6vh;
+    border-radius: 1.6vh;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            rgba(255, 255, 255, 0.08) 0,
+            rgba(255, 255, 255, 0.08) 1px,
+            transparent 1px,
+            transparent 5px
+        );
+    pointer-events: none;
+}
+
+.hole {
+    position: absolute;
+    top: 6vh;
+    z-index: 2;
+    width: 4.2vh;
+    height: 4.2vh;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: inset 0 0 0 0.9vh #cf1115;
+}
+
+.hole-left {
+    left: 5.5vw;
+}
+
+.hole-right {
+    right: 5.5vw;
+}
+
+.headline {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 38%;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: clamp(48px, 13vw, 112px);
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: 0;
+    white-space: nowrap;
+}
+
+.details {
+    position: relative;
+    z-index: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0 5vw;
+    padding: 3vh 4vw;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1.5vh;
+    background: #f7f7f7;
+    border-radius: 2vh;
+    box-shadow: inset 0 0 0 0.6vh rgba(220, 220, 220, 0.75);
+    color: #071018;
+    font-family: "Comic Sans MS", "Segoe Print", "Bradley Hand ITC", cursive;
+    text-align: center;
+    overflow: hidden;
+}
+
+.details p {
+    margin: 0;
+    color: #071018;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#price {
+    font-size: clamp(34px, 9.5vw, 78px);
+}
+
+#contact-line {
+    font-size: clamp(24px, 6.6vw, 54px);
+}
