@@ -1,6 +1,6 @@
 # Car Sale Script
 
-Car Sale Script lets players sell their owned vehicles directly in the world using a for-sale sign. Sellers can list a vehicle, set a price, show contact details, and let buyers inspect or test drive the car before making an offer.
+Car Sale Script lets players sell their owned vehicles directly in the world using a for-sale sign. Owners can list a vehicle, set a price, show contact details, and let buyers inspect or test drive the car before making an offer.
 
 The script is made for QB/QBX FiveM servers and uses ox resources for targeting, database access, and inventory support.
 
@@ -9,8 +9,8 @@ The script is made for QB/QBX FiveM servers and uses ox resources for targeting,
 ## Features
 
 - Physical for-sale signs displayed on listed vehicles.
-- Seller and buyer ox_target options.
-- Seller details menu with phone number copy/save support.
+- Owner and buyer ox_target options.
+- Owner details menu with phone number copy/save support.
 - Vehicle mod inspection.
 - Test drive support.
 - Negotiation and counter-offer flow.
