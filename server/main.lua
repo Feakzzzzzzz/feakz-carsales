@@ -1457,6 +1457,33 @@ local function setTransactionStatus(token, status, lastError)
     return updated == 1
 end
 
+local function getBuyerPaymentAccount(src, amount)
+    if Bridge.GetCash(src) >= amount then return 'cash' end
+    if Bridge.GetBank(src) >= amount then return 'bank' end
+    return nil
+end
+
+local function removeBuyerPayment(src, account, amount, reason)
+    if account == 'cash' then return Bridge.RemoveCash(src, amount, reason) end
+    return Bridge.RemoveBank(src, amount, reason)
+end
+
+local function refundBuyerPayment(src, account, amount, reason)
+    if account == 'cash' then return Bridge.AddCash(src, amount, reason) end
+    return Bridge.AddBank(src, amount, reason)
+end
+
+local function creditSellerPayment(src, account, amount, reason)
+    if account == 'cash' then
+        if Bridge.AddCash(src, amount, reason) then return true, 'cash' end
+        if Bridge.AddBank(src, amount, reason) then return true, 'bank' end
+        return false, nil
+    end
+
+    if Bridge.AddBank(src, amount, reason) then return true, 'bank' end
+    return false, nil
+end
+
 RegisterNetEvent('car-sales:server:respondOffer', function(token, accepted)
     local src = source
     if rateLimited(src, 'respondOffer') then return end
@@ -1543,8 +1570,9 @@ RegisterNetEvent('car-sales:server:respondOffer', function(token, accepted)
         return
     end
 
-    if Bridge.GetBank(src) < salePrice then
-        fail('Buyer has insufficient bank funds.')
+    local paymentAccount = getBuyerPaymentAccount(src, salePrice)
+    if not paymentAccount then
+        fail('Buyer has insufficient cash or bank funds.')
         return
     end
 
@@ -1558,7 +1586,7 @@ RegisterNetEvent('car-sales:server:respondOffer', function(token, accepted)
         return
     end
 
-    if not Bridge.RemoveBank(src, salePrice, ('Vehicle purchase %s'):format(listing.originalPlate)) then
+    if not removeBuyerPayment(src, paymentAccount, salePrice, ('Vehicle purchase %s'):format(listing.originalPlate)) then
         setTransactionStatus(token, 'failed', 'buyer debit failed')
         fail('Payment failed.')
         return
@@ -1567,7 +1595,7 @@ RegisterNetEvent('car-sales:server:respondOffer', function(token, accepted)
 
     setTransactionStatus(token, 'owner_transfer_pending')
     if not updateVehicleOwner(listing.originalPlate, listing.sellerIdentifier, buyerIdentifier, src) then
-        local refunded = Bridge.AddBank(src, salePrice, 'Vehicle purchase refund')
+        local refunded = refundBuyerPayment(src, paymentAccount, salePrice, 'Vehicle purchase refund')
         setTransactionStatus(
             token,
             refunded and 'refunded' or 'manual_review',
@@ -1579,14 +1607,20 @@ RegisterNetEvent('car-sales:server:respondOffer', function(token, accepted)
     setTransactionStatus(token, 'owner_transferred')
 
     setTransactionStatus(token, 'seller_credit_pending')
-    if not Bridge.AddBank(offer.sellerSrc, salePrice, ('Vehicle sale %s'):format(listing.originalPlate)) then
+    local sellerCredited = creditSellerPayment(
+        offer.sellerSrc,
+        paymentAccount,
+        salePrice,
+        ('Vehicle sale %s'):format(listing.originalPlate)
+    )
+    if not sellerCredited then
         local ownershipRestored = updateVehicleOwner(
             listing.originalPlate,
             buyerIdentifier,
             listing.sellerIdentifier,
             offer.sellerSrc
         )
-        local refunded = ownershipRestored and Bridge.AddBank(src, salePrice, 'Vehicle purchase refund') or false
+        local refunded = ownershipRestored and refundBuyerPayment(src, paymentAccount, salePrice, 'Vehicle purchase refund') or false
         local rolledBack = ownershipRestored and refunded
         setTransactionStatus(
             token,

@@ -1600,6 +1600,15 @@ local buyerSaleTargetOptions = {
             end
         },
         {
+            name = 'car_sales_inspect_mods',
+            icon = Config.TargetIcons.inspect,
+            label = 'Inspect Mods',
+            distance = Config.Listing.targetDistance,
+            onSelect = function(data)
+                openVehicleModsMenu(data.entity)
+            end
+        },
+        {
             name = 'car_sales_testdrive',
             icon = Config.TargetIcons.testDrive,
             label = 'Test Drive Vehicle',
@@ -1619,16 +1628,8 @@ local buyerSaleTargetOptions = {
 
 local sellerSaleTargetOptions = {
         buyerSaleTargetOptions[1],
-        {
-            name = 'car_sales_inspect_mods',
-            icon = Config.TargetIcons.inspect,
-            label = 'Inspect Mods',
-            distance = Config.Listing.targetDistance,
-            onSelect = function(data)
-                openVehicleModsMenu(data.entity)
-            end
-        },
         buyerSaleTargetOptions[2],
+        buyerSaleTargetOptions[3],
         {
             name = 'car_sales_offer',
             icon = Config.TargetIcons.offer,
@@ -1913,6 +1914,30 @@ local function updateSaleBlips(snapshot)
         if not seen[entity] or not isTrackedSaleVehicle(entity) then destroySaleBlip(entity) end
     end
     return hasNearby
+end
+
+local function refreshSaleSignsAfterReturn()
+    CreateThread(function()
+        for entity in pairs(duiSigns) do
+            destroyDuiSign(entity)
+        end
+
+        for attempt = 1, 6 do
+            Wait(attempt == 1 and 250 or 750)
+            discoverSaleVehicles()
+
+            local pedCoords = GetEntityCoords(PlayerPedId())
+            local snapshot = buildTrackedVehicleSnapshot(pedCoords)
+
+            for _, tracked in ipairs(snapshot) do
+                trackSaleVehicle(tracked.entity, tracked.data)
+                applySaleLock(tracked.entity)
+            end
+
+            rebuildDuiAssignments(pedCoords, snapshot)
+            updateSaleBlips(snapshot)
+        end
+    end)
 end
 
 CreateThread(function()
@@ -2410,6 +2435,7 @@ RegisterNetEvent('car-sales:client:finishTestDriveReturn', function(reason)
     fadeInFromTestDrive()
     testDrive = nil
     endingTestDrive = false
+    refreshSaleSignsAfterReturn()
     notify(returnMessages[reason] or 'Returned from test drive.', returnErrors[reason] and 'error' or 'inform')
 end)
 

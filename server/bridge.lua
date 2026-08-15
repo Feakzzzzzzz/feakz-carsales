@@ -453,6 +453,12 @@ function Bridge.GetBank(src)
     return tonumber(player.Functions.GetMoney('bank')) or 0
 end
 
+function Bridge.GetCash(src)
+    local player = Bridge.GetPlayer(src)
+    if not player then return 0 end
+    return tonumber(player.Functions.GetMoney('cash')) or 0
+end
+
 function Bridge.RemoveBank(src, amount, reason)
     local player = Bridge.GetPlayer(src)
     if not player then return false end
@@ -461,10 +467,25 @@ function Bridge.RemoveBank(src, amount, reason)
     return result ~= false
 end
 
+function Bridge.RemoveCash(src, amount, reason)
+    local player = Bridge.GetPlayer(src)
+    if not player then return false end
+    if Bridge.GetCash(src) < amount then return false end
+    local result = player.Functions.RemoveMoney('cash', amount, reason or 'Vehicle purchase')
+    return result ~= false
+end
+
 function Bridge.AddBank(src, amount, reason)
     local player = Bridge.GetPlayer(src)
     if not player then return false end
     local result = player.Functions.AddMoney('bank', amount, reason or 'Vehicle sale')
+    return result ~= false
+end
+
+function Bridge.AddCash(src, amount, reason)
+    local player = Bridge.GetPlayer(src)
+    if not player then return false end
+    local result = player.Functions.AddMoney('cash', amount, reason or 'Vehicle sale')
     return result ~= false
 end
 

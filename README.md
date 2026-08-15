@@ -14,10 +14,8 @@ The script is made for QB/QBX FiveM servers and uses ox resources for targeting,
 - Vehicle mod inspection.
 - Test drive support.
 - Negotiation and counter-offer flow.
-- Automatic bank payment transfer on sale.
+- Cash-first payment transfer on sale, with bank fallback.
 - Vehicle ownership transfer after purchase.
-- Configurable vehicle class and model blacklist.
-- Motorcycle and bicycle sign placement support.
 
 ## Performance
 
@@ -35,7 +33,8 @@ With 4 DUI sale signs loaded nearby, idle usage is typically around `0.04ms - 0.
 2. Enter the desired sale price and confirm the listing.
 3. The owner can offer the vehicle to a nearby buyer.
 4. The buyer can accept the listed price or negotiate a counter offer.
-5. When accepted, funds are deducted from the buyer and transferred to the owner.
+5. When accepted, funds are deducted from the buyer's cash first, or bank if cash is not enough.
+6. The owner receives cash for cash sales, with bank used as a payout fallback.
 
 ## Requirements
 
