@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'Feakz'
 description 'Physical player-to-player vehicle sale signs'
-version '1.1.3'
+version '1.1.4'
 
 lua54 'yes'
 ui_page 'html/sign.html'

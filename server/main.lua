@@ -1000,6 +1000,11 @@ RegisterNetEvent('car-sales:server:startTestDrive', function(listingId, jgMechan
     local src = source
     if rateLimited(src, 'testDrive') then return end
 
+    if Config.TestDrive.enabled ~= true then
+        CarSale.Notify(src, Config.Notifications.title, 'Test drives are disabled.', 'error')
+        return
+    end
+
     local listing = listings[tonumber(listingId)]
     if not listing then
         CarSale.Notify(src, Config.Notifications.title, 'This vehicle is no longer available.', 'error')
@@ -1081,6 +1086,33 @@ RegisterNetEvent('car-sales:server:readyForTestDrive', function(listingId)
     drive.status = 'spawning'
     drive.prepareExpiresAt = nil
     TriggerClientEvent('car-sales:client:startTestDrive', src, drive.startData)
+end)
+
+lib.callback.register('car-sales:server:confirmTestDriveBucket', function(src, listingId, targetBucket)
+    local drive = activeTestDrives[src]
+    targetBucket = tonumber(targetBucket)
+
+    if not drive
+        or drive.status ~= 'spawning'
+        or drive.listingId ~= tonumber(listingId)
+        or drive.testBucket ~= targetBucket then
+        return false
+    end
+
+    if GetPlayerRoutingBucket(src) == targetBucket then return true end
+
+    return setPlayerBucket(src, targetBucket)
+end)
+
+RegisterNetEvent('car-sales:server:cancelTestDriveStart', function(reason)
+    local src = source
+    local drive = activeTestDrives[src]
+    if not drive or drive.status ~= 'spawning' or drive.vehicleNetId then return end
+
+    failTestDriveStart(
+        src,
+        reason == 'bucket_failed' and 'Could not move you to the test drive.' or 'Could not start test drive.'
+    )
 end)
 
 RegisterNetEvent('car-sales:server:setTestDriveVehicle', function(netId)

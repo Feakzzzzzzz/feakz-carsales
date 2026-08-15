@@ -22,22 +22,82 @@ local function applyDefaults(target, defaults)
     return target
 end
 
+local function normalizeFrameworkConfig(framework)
+    local normalized
+
+    if type(framework) == 'table' then
+        normalized = framework
+    else
+        normalized = {
+            resource = framework
+        }
+    end
+
+    normalized = applyDefaults(normalized, {
+        name = 'qb',
+        resource = 'qb-core'
+    })
+
+    local name = type(normalized.name) == 'string' and normalized.name:lower() or nil
+    local resource = type(normalized.resource) == 'string' and normalized.resource:lower() or nil
+
+    if name == 'qbx'
+        or name == 'qbox'
+        or name == 'qbx_core'
+        or resource == 'qbx_core' then
+        normalized.name = 'qb'
+        normalized.resource = 'qb-core'
+    end
+
+    return normalized
+end
+
+local function getCompatibilityValue(...)
+    local compatibility = Config.Compatibility
+        or Config.Compatability
+        or Config.Compandibityy
+
+    if type(compatibility) ~= 'table' then return nil end
+
+    for _, key in ipairs({ ... }) do
+        if compatibility[key] ~= nil then return compatibility[key] end
+    end
+
+    return nil
+end
+
+local function normalizeJgMechanicConfig()
+    local mechanic = Config.Mechanic
+    local compatibility = getCompatibilityValue('jgMechanic', 'jg-mechanic', 'jg_mechanic')
+    local normalized = {
+        enabled = true,
+        resource = 'jg-mechanic'
+    }
+
+    if mechanic == false then
+        normalized.enabled = false
+    elseif type(mechanic) == 'table' then
+        normalized.resource = mechanic.resource or normalized.resource
+        if mechanic.enabled ~= nil then normalized.enabled = mechanic.enabled == true end
+    end
+
+    if compatibility ~= nil then
+        if type(compatibility) == 'boolean' then
+            normalized.enabled = compatibility
+        elseif type(compatibility) == 'table' then
+            normalized.resource = compatibility.resource or normalized.resource
+            if compatibility.enabled ~= nil then normalized.enabled = compatibility.enabled == true end
+        end
+    end
+
+    return normalized
+end
+
 local function applyServerConfigDefaults()
     Config = Config or {}
     Config.Debug = Config.Debug == true
 
-    local framework = Config.Framework
-    if type(framework) == 'table' then
-        Config.Framework = applyDefaults(framework, {
-            name = 'qb',
-            resource = 'qb-core'
-        })
-    else
-        Config.Framework = {
-            name = 'qb',
-            resource = framework or 'qb-core'
-        }
-    end
+    Config.Framework = normalizeFrameworkConfig(Config.Framework)
 
     local inventory = Config.Inventory
     if type(inventory) == 'table' then
@@ -114,21 +174,8 @@ local function applyServerConfigDefaults()
         customRemoveEvent = nil
     })
 
-    local mechanic = Config.Mechanic
-    local mechanicDefaults = {
-        enabled = true,
-        resource = 'jg-mechanic'
-    }
-
-    if mechanic == false then
-        mechanicDefaults.enabled = false
-    elseif type(mechanic) == 'table' then
-        mechanicDefaults.resource = mechanic.resource or mechanicDefaults.resource
-        if mechanic.enabled ~= nil then mechanicDefaults.enabled = mechanic.enabled == true end
-    end
-
     Config.Integrations = applyDefaults(Config.Integrations, {
-        jgMechanic = mechanicDefaults
+        jgMechanic = normalizeJgMechanicConfig()
     })
 
     Config.Listing = applyDefaults(Config.Listing, {
@@ -181,7 +228,14 @@ local function applyServerConfigDefaults()
         }
     })
 
-    Config.TestDrive = applyDefaults(type(Config.TestDrive) == 'table' and Config.TestDrive or {}, {
+    local testDrive = type(Config.TestDrive) == 'table' and Config.TestDrive or {}
+    if testDrive.enabled == nil then
+        testDrive.enabled = testDrive.Enable
+        if testDrive.enabled == nil then testDrive.enabled = testDrive.Enabled end
+    end
+
+    Config.TestDrive = applyDefaults(testDrive, {
+        enabled = true,
         durationSeconds = 120,
         routingBucketBase = 62000,
         routingBucketMax = 62999,
@@ -229,7 +283,11 @@ end
 
 local function getPhoneResource()
     local phone = Config.Phone or {}
-    if phone.resource and phone.resource ~= '' then return phone.resource end
+    if phone.resource and phone.resource ~= '' then
+        local resource = tostring(phone.resource)
+        if resource:lower() == 'none' then return nil end
+        return resource
+    end
 
     -- Backwards compatibility for configs from older versions of this resource.
     if phone.sdPhone and phone.sdPhone.enabled and phone.sdPhone.resource then return phone.sdPhone.resource end

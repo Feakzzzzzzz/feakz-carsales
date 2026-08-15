@@ -1,14 +1,13 @@
 Config = {}
 
-Config.Debug = true
+Config.Debug = false
 
-Config.Framework = 'qb-core'
+Config.Framework = 'qbx_core' -- 'qbx_core' , 'qb-core'
 Config.Inventory = 'ox_inventory'
-Config.Phone = {
-    resource = 'sd-phone',
 
-    -- Set to false to hide "Save Contact" from the seller details menu.
-    saveContacts = true
+Config.Phone = {
+    resource = 'none', -- 'sd-phone', 'lb-phone', or 'none' to use QB/QBX
+    saveContacts = true -- Set false to hide "Save Contact" from the seller details menu.
 }
 
 Config.Item = {
@@ -18,28 +17,17 @@ Config.Item = {
 }
 
 Config.Render = {
-    -- How far away sale vehicle blips show.
-    blipDistance = 75.0,
-
-    -- How far away sale signs are tracked.
-    signDistance = 25.0,
-
-    -- How far away sale signs are drawn.
-    signDrawDistance = 7.0,
-
-    -- How many DUI textures can exist at once.
-    duiPoolSize = 4,
-
-    -- How many nearby signs can use DUI textures.
-    duiClosestSigns = 4
+    blipDistance = 75.0,    -- How far away sale vehicle blips show.
+    signDistance = 25.0,    -- How far away sale signs are tracked.
+    signDrawDistance = 7.0, -- How far away sale signs are drawn.
+    duiPoolSize = 4,        -- How many DUI textures can exist at once.
+    duiClosestSigns = 4     -- How many nearby signs can use DUI textures.
 }
 
 Config.TestDrive = {
-    -- How long test drives last, in seconds.
-    durationSeconds = 120,
-
-    -- Shows a countdown timer while test driving.
-    drawTimer = true
+    enabled = true,        -- Set false to disable test drives.
+    durationSeconds = 120, -- How long test drives last, in seconds.
+    drawTimer = false       -- Shows a countdown timer while test driving.
 }
 
 Config.Listing = {
@@ -106,6 +94,6 @@ Config.Keys = {
     resource = 'qbx_vehiclekeys'
 }
 
-Config.Mechanic = {
-    resource = 'jg-mechanic'
+Config.Compatibility = {
+    ['jg-mechanic'] = false -- set this to true if you use stances
 }

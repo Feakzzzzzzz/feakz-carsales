@@ -22,6 +22,47 @@ local function applyDefaults(target, defaults)
     return target
 end
 
+local function getCompatibilityValue(...)
+    local compatibility = Config.Compatibility
+        or Config.Compatability
+        or Config.Compandibityy
+
+    if type(compatibility) ~= 'table' then return nil end
+
+    for _, key in ipairs({ ... }) do
+        if compatibility[key] ~= nil then return compatibility[key] end
+    end
+
+    return nil
+end
+
+local function normalizeJgMechanicConfig()
+    local mechanic = Config.Mechanic
+    local compatibility = getCompatibilityValue('jgMechanic', 'jg-mechanic', 'jg_mechanic')
+    local normalized = {
+        enabled = true,
+        resource = 'jg-mechanic'
+    }
+
+    if mechanic == false then
+        normalized.enabled = false
+    elseif type(mechanic) == 'table' then
+        normalized.resource = mechanic.resource or normalized.resource
+        if mechanic.enabled ~= nil then normalized.enabled = mechanic.enabled == true end
+    end
+
+    if compatibility ~= nil then
+        if type(compatibility) == 'boolean' then
+            normalized.enabled = compatibility
+        elseif type(compatibility) == 'table' then
+            normalized.resource = compatibility.resource or normalized.resource
+            if compatibility.enabled ~= nil then normalized.enabled = compatibility.enabled == true end
+        end
+    end
+
+    return normalized
+end
+
 local function applyClientConfigDefaults()
     Config = Config or {}
     Config.Debug = Config.Debug == true
@@ -60,21 +101,8 @@ local function applyClientConfigDefaults()
         saveContacts = true
     })
 
-    local mechanic = Config.Mechanic
-    local mechanicDefaults = {
-        enabled = true,
-        resource = 'jg-mechanic'
-    }
-
-    if mechanic == false then
-        mechanicDefaults.enabled = false
-    elseif type(mechanic) == 'table' then
-        mechanicDefaults.resource = mechanic.resource or mechanicDefaults.resource
-        if mechanic.enabled ~= nil then mechanicDefaults.enabled = mechanic.enabled == true end
-    end
-
     Config.Integrations = applyDefaults(Config.Integrations, {
-        jgMechanic = mechanicDefaults
+        jgMechanic = normalizeJgMechanicConfig()
     })
 
     Config.Keys = type(Config.Keys) == 'table' and Config.Keys or { resource = Config.Keys }
@@ -185,8 +213,13 @@ local function applyClientConfigDefaults()
     if testDrive.durationSeconds == nil then
         testDrive.durationSeconds = testDrive.Duration or testDrive.duration
     end
+    if testDrive.enabled == nil then
+        testDrive.enabled = testDrive.Enable
+        if testDrive.enabled == nil then testDrive.enabled = testDrive.Enabled end
+    end
 
     Config.TestDrive = applyDefaults(testDrive, {
+        enabled = true,
         durationSeconds = 120,
         drawTimer = true,
         spawnOffset = vec4(0.0, 0.0, 0.0, 0.0),
@@ -339,6 +372,7 @@ local function notify(description, notifyType)
 end
 
 local function isPhoneProviderRunning(provider)
+    if provider and tostring(provider):lower() == 'none' then return false end
     return provider and GetResourceState(provider) == 'started'
 end
 
@@ -1826,7 +1860,14 @@ local buyerSaleTargetOptions = {
             icon = Config.TargetIcons.testDrive,
             label = 'Test Drive Vehicle',
             distance = Config.Listing.targetDistance,
+            canInteract = function()
+                return Config.TestDrive.enabled == true
+            end,
             onSelect = function(data)
+                if Config.TestDrive.enabled ~= true then
+                    notify('Test drives are disabled.', 'error')
+                    return
+                end
                 if testDrive then
                     notify('You are already in a test drive.', 'error')
                     return
@@ -2407,6 +2448,7 @@ local returnMessages = {
     player_died = 'Returned from test drive.',
     vehicle_destroyed = 'Test drive vehicle was destroyed.',
     exited_vehicle = 'Test drive ended.',
+    bucket_failed = 'Could not move you to the test drive.',
     model_load_failed = 'Could not load test drive vehicle.',
     spawn_failed = 'Could not create test drive vehicle.',
     network_failed = 'Could not network test drive vehicle.',
@@ -2414,6 +2456,7 @@ local returnMessages = {
 }
 
 local returnErrors = {
+    bucket_failed = true,
     model_load_failed = true,
     spawn_failed = true,
     network_failed = true,
@@ -2488,6 +2531,17 @@ RegisterNetEvent('car-sales:client:startTestDrive', function(data)
 
     local finishStartFailure = function(reason)
         TriggerServerEvent('car-sales:server:endTestDrive', reason)
+    end
+
+    local bucketReady = lib.callback.await(
+        'car-sales:server:confirmTestDriveBucket',
+        false,
+        data.listingId,
+        data.targetBucket
+    )
+    if not bucketReady then
+        TriggerServerEvent('car-sales:server:cancelTestDriveStart', 'bucket_failed')
+        return
     end
 
     local model = data.props and data.props.model or data.modelHash or data.model

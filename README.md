@@ -38,7 +38,7 @@ With 4 DUI sale signs loaded nearby, idle usage is typically around `0.04ms - 0.
 
 ## Requirements
 
-- `qb-core`
+- `qb-core` or Qbox's `qb-core` compatibility bridge
 - `ox_lib`
 - `ox_target`
 - `oxmysql`
@@ -49,6 +49,25 @@ With 4 DUI sale signs loaded nearby, idle usage is typically around `0.04ms - 0.
 1. Run `install/install.sql`.
 2. Add the item below to `ox_inventory/data/items.lua`.
 3. Ensure the resource after its dependencies.
+
+## Compatibility
+
+```lua
+Config.Framework = 'qb-core' -- or 'qbx_core'
+
+Config.Compatibility = {
+    ['jg-mechanic'] = true -- set false if you do not run jg-mechanic
+}
+
+Config.Phone = {
+    resource = 'sd-phone', -- 'sd-phone', 'lb-phone', or 'none' to use QB/QBX
+    saveContacts = true
+}
+
+Config.TestDrive = {
+    enabled = true
+}
+```
 
 ## Item
 
