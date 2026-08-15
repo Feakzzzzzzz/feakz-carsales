@@ -4,9 +4,12 @@ Config.Debug = false
 
 Config.Framework = 'qb-core'
 Config.Inventory = 'ox_inventory'
-Config.Phone = 'sd-phone'
+Config.Phone = {
+    resource = 'sd-phone',
 
-
+    -- Set to false to hide "Save Contact" from the seller details menu.
+    saveContacts = true
+}
 
 Config.Item = {
     Item = 'car_sale_sign',
