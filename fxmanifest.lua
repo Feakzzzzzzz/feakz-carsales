@@ -11,7 +11,6 @@ ui_page 'html/sign.html'
 shared_scripts {
     '@ox_lib/init.lua',
     'config.lua',
-    'shared/config_defaults.lua',
     'shared/utils.lua',
     'shared/vehicle_properties.lua'
 }
