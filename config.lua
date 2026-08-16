@@ -34,6 +34,17 @@ Config.Listing = {
     minPrice = 100,
     maxPrice = 10000000,
 
+    -- Event-driven protection; no periodic vehicle-care loop.
+    vehicleCare = {
+        keepClean = true,            -- Keep listed vehicles clean.
+        keepWindowsFixed = true,     -- Repair broken windows when the vehicle is listed or damaged.
+        preventDisplayDamage = true, -- Repair the vehicle when listed and protect it from visible damage.
+        keepWindowsInvincible = true, -- Prevent listed vehicle glass from breaking when possible.
+        eventCooldownMs = 250,       -- Prevent duplicate repairs from the same damage event.
+        visualRepairDelayMs = 150,   -- Repair scratches after GTA finishes applying visual damage.
+        cleanThreshold = 0.1
+    },
+
     --  List model names to disable it
     vehicleBlacklist = {
         -- 'rhino',

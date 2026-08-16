@@ -1,249 +1,3 @@
-local function clone(value)
-    if type(value) ~= 'table' then return value end
-
-    local out = {}
-    for key, item in pairs(value) do
-        out[key] = clone(item)
-    end
-    return out
-end
-
-local function applyDefaults(target, defaults)
-    if type(target) ~= 'table' then target = {} end
-
-    for key, value in pairs(defaults) do
-        if target[key] == nil then
-            target[key] = clone(value)
-        elseif type(target[key]) == 'table' and type(value) == 'table' then
-            applyDefaults(target[key], value)
-        end
-    end
-
-    return target
-end
-
-local function getCompatibilityValue(...)
-    local compatibility = Config.Compatibility
-        or Config.Compatability
-        or Config.Compandibityy
-
-    if type(compatibility) ~= 'table' then return nil end
-
-    for _, key in ipairs({ ... }) do
-        if compatibility[key] ~= nil then return compatibility[key] end
-    end
-
-    return nil
-end
-
-local function normalizeJgMechanicConfig()
-    local mechanic = Config.Mechanic
-    local compatibility = getCompatibilityValue('jgMechanic', 'jg-mechanic', 'jg_mechanic')
-    local normalized = {
-        enabled = true,
-        resource = 'jg-mechanic'
-    }
-
-    if mechanic == false then
-        normalized.enabled = false
-    elseif type(mechanic) == 'table' then
-        normalized.resource = mechanic.resource or normalized.resource
-        if mechanic.enabled ~= nil then normalized.enabled = mechanic.enabled == true end
-    end
-
-    if compatibility ~= nil then
-        if type(compatibility) == 'boolean' then
-            normalized.enabled = compatibility
-        elseif type(compatibility) == 'table' then
-            normalized.resource = compatibility.resource or normalized.resource
-            if compatibility.enabled ~= nil then normalized.enabled = compatibility.enabled == true end
-        end
-    end
-
-    return normalized
-end
-
-local function applyClientConfigDefaults()
-    Config = Config or {}
-    Config.Debug = Config.Debug == true
-
-    local inventory = Config.Inventory
-    if type(inventory) == 'table' then
-        Config.Inventory = inventory
-    else
-        Config.Inventory = {
-            resource = inventory or 'ox_inventory'
-        }
-    end
-
-    local item = Config.Item
-    local itemName = 'car_sale_sign'
-    if type(item) == 'table' then
-        itemName = item.Item or item.item or item.name or itemName
-    elseif type(item) == 'string' then
-        itemName = item
-    end
-
-    Config.Inventory = applyDefaults(Config.Inventory, {
-        signItem = itemName
-    })
-
-    local phone = Config.Phone
-    if type(phone) == 'table' then
-        Config.Phone = phone
-    else
-        Config.Phone = {
-            resource = phone or 'sd-phone'
-        }
-    end
-
-    Config.Phone = applyDefaults(Config.Phone, {
-        saveContacts = true
-    })
-
-    Config.Integrations = applyDefaults(Config.Integrations, {
-        jgMechanic = normalizeJgMechanicConfig()
-    })
-
-    Config.Keys = type(Config.Keys) == 'table' and Config.Keys or { resource = Config.Keys }
-    Config.Keys = applyDefaults(Config.Keys, {
-        lockStateEvent = 'qb-vehiclekeys:server:setVehLockState'
-    })
-
-    Config.Listing = applyDefaults(Config.Listing, {
-        useDistance = 5.0,
-        targetDistance = 3.0,
-        minPrice = 100,
-        maxPrice = 10000000,
-        saleVehicleDiscoveryMs = 15000,
-        saleVehicleDiscoveryIdleMs = 60000,
-        vehicleBlacklist = {},
-        classBlacklist = {},
-        vehicleCare = {
-            keepClean = true,
-            keepWindowsFixed = true,
-            preventDisplayDamage = true,
-            distance = 60.0,
-            intervalMs = 5000,
-            farIntervalMs = 5000,
-            cleanThreshold = 0.1,
-            fullRefreshMs = 10000
-        }
-    })
-
-    local render = type(Config.Render) == 'table' and Config.Render or {}
-
-    Config.Sign = applyDefaults(Config.Sign, {
-        texture = {
-            resolutionScale = render.duiResolutionScale or render.resolutionScale or 0.5,
-            poolSize = render.duiPoolSize or render.poolSize or 4,
-            closestSigns = render.duiClosestSigns or render.closestSigns or 4,
-            idleDestroyMs = 60000,
-            initRetries = 2,
-            retryDelayMs = 1000,
-            poolRetryMs = 15000
-        },
-        render = {
-            distance = render.signDistance or render.signRenderDistance or 25.0,
-            drawDistance = render.signDrawDistance or render.drawDistance or 7.0,
-            nearScanMs = 1000,
-            approachScanMs = 2000,
-            farScanMs = 5000,
-            visibilityCheckMs = 1000,
-            contentCheckMs = 5000
-        },
-        placement = {
-            anchorBones = { 'windscreen', 'windscreen_f', 'window_lf', 'window_rf', 'bodyshell' },
-            fallbackAnchor = vec3(0.0, 0.72, 0.93),
-            offset = vec3(0.0, 0.0, 0.0),
-            baseSize = vec2(0.59, 0.27),
-            scale = 1.0,
-            tilt = 0.08,
-            classOverrides = {
-                ['Motorcycles'] = {
-                    anchorBones = { 'wheel_f', 'wheel_lf', 'wheel_rf', 'forks_f' },
-                    fallbackAnchor = vec3(0.0, 1.05, 0.32),
-                    offset = vec3(0.0, 0.35, 0.0),
-                    baseSize = vec2(0.42, 0.2),
-                    tilt = 0.08
-                },
-                ['Cycles'] = {
-                    anchorBones = { 'wheel_f', 'wheel_lf', 'wheel_rf', 'forks_f' },
-                    fallbackAnchor = vec3(0.0, 1.0, 0.3),
-                    offset = vec3(0.0, 0.35, 0.0),
-                    baseSize = vec2(0.42, 0.2),
-                    tilt = 0.08
-                }
-            }
-        },
-        adjustment = {
-            x = { min = -120, max = 120 },
-            y = { min = -100, max = 100 },
-            z = { min = -80, max = 100 },
-            width = { min = 30, max = 160 },
-            height = { min = 15, max = 90 },
-            tilt = { min = -40, max = 40 }
-        }
-    })
-
-    Config.TargetIcons = applyDefaults(Config.TargetIcons, {
-        details = 'fa-solid fa-address-card',
-        inspect = 'fa-solid fa-gears',
-        testDrive = 'fa-solid fa-road',
-        offer = 'fa-solid fa-handshake',
-        cancel = 'fa-solid fa-ban',
-        edit = 'fa-solid fa-pen-to-square',
-        view = 'fa-solid fa-circle-info',
-        adjust = 'fa-solid fa-sliders'
-    })
-
-    Config.Blip = applyDefaults(Config.Blip, {
-        enabled = true,
-        radius = render.blipDistance or render.blipRenderDistance or render.blipRadius or 75.0,
-        scanIntervalMs = 2000,
-        farScanIntervalMs = 5000,
-        sprite = 225,
-        color = 1,
-        scale = 0.75,
-        name = 'Vehicle For Sale',
-        shortRange = true
-    })
-
-    local testDrive = type(Config.TestDrive) == 'table' and Config.TestDrive or {}
-    if testDrive.durationSeconds == nil then
-        testDrive.durationSeconds = testDrive.Duration or testDrive.duration
-    end
-    if testDrive.enabled == nil then
-        testDrive.enabled = testDrive.Enable
-        if testDrive.enabled == nil then testDrive.enabled = testDrive.Enabled end
-    end
-
-    Config.TestDrive = applyDefaults(testDrive, {
-        enabled = true,
-        durationSeconds = 120,
-        drawTimer = true,
-        spawnOffset = vec4(0.0, 0.0, 0.0, 0.0),
-        spawnAttempts = 3,
-        fadeOutMs = 350,
-        fadeInMs = 500,
-        transitionHoldMs = 250,
-        collisionTimeoutMs = 3500,
-        invincibleVehicle = false,
-        endOnExitVehicle = true
-    })
-
-    Config.Notifications = applyDefaults(Config.Notifications, {
-        title = 'Vehicle Sale'
-    })
-
-    Config.Optimization = applyDefaults(Config.Optimization, {
-        metrics = false,
-        metricsIntervalMs = 60000
-    })
-end
-
-applyClientConfigDefaults()
-
 local targetRegistered = false
 local testDrive = nil
 local endingTestDrive = false
@@ -303,12 +57,6 @@ end
 
 local function incrementMetric(name, amount)
     runtimeMetrics[name] = (runtimeMetrics[name] or 0) + (amount or 1)
-end
-
-local function countEntries(value)
-    local count = 0
-    for _ in pairs(value) do count = count + 1 end
-    return count
 end
 
 local function normalizeSaleData(value)
@@ -379,12 +127,6 @@ end
 local function hasServerContactIntegration()
     local resource = Config.Phone and Config.Phone.resource
     return isPhoneProviderRunning(resource) and (resource == 'sd-phone' or resource == 'lb-phone')
-end
-
-local function phoneContactsEnabled()
-    local phone = Config.Phone or {}
-    if phone.saveContacts ~= nil then return phone.saveContacts == true end
-    return not phone.contact or phone.contact.enabled ~= false
 end
 
 exports('useCarSaleSign', function(data)
@@ -544,29 +286,62 @@ local function reapplyTestDriveJgStance(vehicle, props)
     end)
 end
 
+local function captureEntityProofState(entity)
+    if not GetEntityProofs then return nil end
+
+    local success, bullet, fire, explosion, collision, melee, steam, p7, drown = GetEntityProofs(entity)
+    if not success then return nil end
+
+    return {
+        bullet = bullet,
+        fire = fire,
+        explosion = explosion,
+        collision = collision,
+        melee = melee,
+        steam = steam,
+        p7 = p7,
+        drown = drown
+    }
+end
+
 local function applySaleDamageProtection(vehicle)
-    if not Config.Listing.vehicleCare.preventDisplayDamage or not DoesEntityExist(vehicle) then return end
+    if not DoesEntityExist(vehicle) then return end
+
+    local care = Config.Listing.vehicleCare
+    if not care.preventDisplayDamage and not care.keepWindowsInvincible then return end
 
     if not saleProtectionStates[vehicle] then
         saleProtectionStates[vehicle] = {
             canBeDamaged = GetEntityCanBeDamaged and GetEntityCanBeDamaged(vehicle),
             invincible = GetEntityInvincible and GetEntityInvincible(vehicle),
-            tyresCanBurst = GetVehicleTyresCanBurst and GetVehicleTyresCanBurst(vehicle)
+            tyresCanBurst = GetVehicleTyresCanBurst and GetVehicleTyresCanBurst(vehicle),
+            proofs = captureEntityProofState(vehicle),
+            fullProtection = care.preventDisplayDamage == true,
+            glassProtection = care.keepWindowsInvincible == true
         }
     end
 
-    if SetEntityCanBeDamaged then SetEntityCanBeDamaged(vehicle, false) end
-    if SetEntityInvincible then SetEntityInvincible(vehicle, true) end
-    if SetVehicleCanBeVisiblyDamaged then SetVehicleCanBeVisiblyDamaged(vehicle, false) end
-    if SetVehicleCanBreak then SetVehicleCanBreak(vehicle, false) end
-    if SetVehicleTyresCanBurst then SetVehicleTyresCanBurst(vehicle, false) end
-    if SetVehicleWheelsCanBreak then SetVehicleWheelsCanBreak(vehicle, false) end
-    if SetVehicleLightsCanBeVisiblyDamaged then SetVehicleLightsCanBeVisiblyDamaged(vehicle, false) end
-    if SetVehicleHasUnbreakableLights then SetVehicleHasUnbreakableLights(vehicle, true) end
+    if care.preventDisplayDamage then
+        if SetEntityCanBeDamaged then SetEntityCanBeDamaged(vehicle, false) end
+        if SetEntityInvincible then SetEntityInvincible(vehicle, true) end
+        if SetEntityProofs then SetEntityProofs(vehicle, true, true, true, true, true, true, true, true) end
+        if SetEntityDecalsDisabled then SetEntityDecalsDisabled(vehicle, true) end
+        if SetVehicleCanBeVisiblyDamaged then SetVehicleCanBeVisiblyDamaged(vehicle, false) end
+        if SetVehicleCanBreak then SetVehicleCanBreak(vehicle, false) end
+        if SetVehicleTyresCanBurst then SetVehicleTyresCanBurst(vehicle, false) end
+        if SetVehicleWheelsCanBreak then SetVehicleWheelsCanBreak(vehicle, false) end
+        if SetVehicleLightsCanBeVisiblyDamaged then SetVehicleLightsCanBeVisiblyDamaged(vehicle, false) end
+        if SetVehicleHasUnbreakableLights then SetVehicleHasUnbreakableLights(vehicle, true) end
+    end
+
+    if care.keepWindowsInvincible then
+        if SetDontProcessVehicleGlass then SetDontProcessVehicleGlass(vehicle, true) end
+        if SetDisableVehicleWindowCollisions then SetDisableVehicleWindowCollisions(vehicle, true) end
+    end
 end
 
 local function restoreSaleDamageProtection(vehicle)
-    if not Config.Listing.vehicleCare.preventDisplayDamage or not DoesEntityExist(vehicle) then return end
+    if not DoesEntityExist(vehicle) then return end
 
     local original = saleProtectionStates[vehicle]
     if not original then return end
@@ -578,14 +353,36 @@ local function restoreSaleDamageProtection(vehicle)
     local tyresCanBurst = original.tyresCanBurst
     if tyresCanBurst == nil then tyresCanBurst = true end
 
-    if SetEntityCanBeDamaged then SetEntityCanBeDamaged(vehicle, canBeDamaged) end
-    if SetEntityInvincible then SetEntityInvincible(vehicle, invincible) end
-    if SetVehicleCanBeVisiblyDamaged then SetVehicleCanBeVisiblyDamaged(vehicle, true) end
-    if SetVehicleCanBreak then SetVehicleCanBreak(vehicle, true) end
-    if SetVehicleTyresCanBurst then SetVehicleTyresCanBurst(vehicle, tyresCanBurst) end
-    if SetVehicleWheelsCanBreak then SetVehicleWheelsCanBreak(vehicle, true) end
-    if SetVehicleLightsCanBeVisiblyDamaged then SetVehicleLightsCanBeVisiblyDamaged(vehicle, true) end
-    if SetVehicleHasUnbreakableLights then SetVehicleHasUnbreakableLights(vehicle, false) end
+    if original.fullProtection then
+        if SetEntityCanBeDamaged then SetEntityCanBeDamaged(vehicle, canBeDamaged) end
+        if SetEntityInvincible then SetEntityInvincible(vehicle, invincible) end
+        if SetEntityProofs then
+            local proofs = original.proofs
+            SetEntityProofs(
+                vehicle,
+                proofs and proofs.bullet or false,
+                proofs and proofs.fire or false,
+                proofs and proofs.explosion or false,
+                proofs and proofs.collision or false,
+                proofs and proofs.melee or false,
+                proofs and proofs.steam or false,
+                proofs and proofs.p7 or false,
+                proofs and proofs.drown or false
+            )
+        end
+        if SetEntityDecalsDisabled then SetEntityDecalsDisabled(vehicle, false) end
+        if SetVehicleCanBeVisiblyDamaged then SetVehicleCanBeVisiblyDamaged(vehicle, true) end
+        if SetVehicleCanBreak then SetVehicleCanBreak(vehicle, true) end
+        if SetVehicleTyresCanBurst then SetVehicleTyresCanBurst(vehicle, tyresCanBurst) end
+        if SetVehicleWheelsCanBreak then SetVehicleWheelsCanBreak(vehicle, true) end
+        if SetVehicleLightsCanBeVisiblyDamaged then SetVehicleLightsCanBeVisiblyDamaged(vehicle, true) end
+        if SetVehicleHasUnbreakableLights then SetVehicleHasUnbreakableLights(vehicle, false) end
+    end
+
+    if original.glassProtection then
+        if SetDontProcessVehicleGlass then SetDontProcessVehicleGlass(vehicle, false) end
+        if SetDisableVehicleWindowCollisions then SetDisableVehicleWindowCollisions(vehicle, false) end
+    end
     saleProtectionStates[vehicle] = nil
 end
 
@@ -636,40 +433,103 @@ local function restoreDoorState(vehicle, state)
     end
 end
 
-local function maintainSalePresentation(vehicle, force)
+local function repairSaleVehicleDisplayDamage(vehicle)
     if not DoesEntityExist(vehicle) then return end
-    local now = GetGameTimer()
-    local careState = saleCareState[vehicle] or { lastFullRefresh = 0 }
-    local refreshMs = Config.Listing.vehicleCare.fullRefreshMs or 10000
-    local fullRefresh = force == true or now - careState.lastFullRefresh >= refreshMs
 
-    if Config.Listing.vehicleCare.keepClean then
-        local dirt = GetVehicleDirtLevel(vehicle)
-        if force or dirt > (Config.Listing.vehicleCare.cleanThreshold or 0.1) then
-            SetVehicleDirtLevel(vehicle, 0.0)
-        end
+    if SetVehicleFixed then SetVehicleFixed(vehicle) end
+    if SetVehicleDeformationFixed then SetVehicleDeformationFixed(vehicle) end
+    if SetVehicleBodyHealth then SetVehicleBodyHealth(vehicle, 1000.0) end
+    if SetVehicleEngineHealth then SetVehicleEngineHealth(vehicle, 1000.0) end
+    if SetVehiclePetrolTankHealth then SetVehiclePetrolTankHealth(vehicle, 1000.0) end
 
-        -- Paint damage decals can exist while the dirt level remains at zero.
-        if fullRefresh then
-            WashDecalsFromVehicle(vehicle, 1.0)
-            RemoveDecalsFromVehicle(vehicle)
-        end
-    end
-
-    if fullRefresh and Config.Listing.vehicleCare.keepWindowsFixed then
+    if FixVehicleWindow then
         for window = 0, 7 do
-            if not IsVehicleWindowIntact or not IsVehicleWindowIntact(vehicle, window) then
-                FixVehicleWindow(vehicle, window)
-            end
+            FixVehicleWindow(vehicle, window)
         end
     end
 
-    if fullRefresh then
-        -- Repair natives may reset protection flags, so protection is applied last.
+    if SetVehicleTyreFixed then
+        for tyre = 0, 7 do
+            SetVehicleTyreFixed(vehicle, tyre)
+        end
+    end
+
+    restoreDoorState(vehicle, saleDoorStates[vehicle])
+end
+
+local function fixBrokenVehicleWindows(vehicle)
+    if not DoesEntityExist(vehicle) or not IsVehicleWindowIntact or not FixVehicleWindow then return false end
+
+    local fixed = false
+    for window = 0, 7 do
+        if not IsVehicleWindowIntact(vehicle, window) then
+            FixVehicleWindow(vehicle, window)
+            fixed = true
+        end
+    end
+
+    return fixed
+end
+
+local function cleanSaleVehicleExterior(vehicle)
+    if not DoesEntityExist(vehicle) or not Config.Listing.vehicleCare.keepClean then return false end
+
+    if GetVehicleDirtLevel(vehicle) > (Config.Listing.vehicleCare.cleanThreshold or 0.1) then
+        SetVehicleDirtLevel(vehicle, 0.0)
+    end
+
+    WashDecalsFromVehicle(vehicle, 1.0)
+    RemoveDecalsFromVehicle(vehicle)
+    return true
+end
+
+local function maintainSalePresentation(vehicle, repairDamage)
+    if not DoesEntityExist(vehicle) then return end
+    local care = Config.Listing.vehicleCare
+
+    local didWork = false
+
+    if repairDamage and care.preventDisplayDamage then
+        repairSaleVehicleDisplayDamage(vehicle)
+        didWork = true
+    elseif care.keepWindowsFixed then
+        didWork = fixBrokenVehicleWindows(vehicle) or didWork
+    end
+
+    didWork = cleanSaleVehicleExterior(vehicle) or didWork
+
+    if care.preventDisplayDamage or care.keepWindowsInvincible then
         applySaleDamageProtection(vehicle)
-        careState.lastFullRefresh = now
-        saleCareState[vehicle] = careState
+        didWork = true
+    end
+
+    if didWork then
         incrementMetric('carePasses')
+    end
+end
+
+local function markSaleVehicleDamaged(vehicle)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) or not saleVehicles[vehicle] then return end
+
+    local care = Config.Listing.vehicleCare
+    if not care.keepClean and not care.keepWindowsFixed and not care.preventDisplayDamage then return end
+
+    local now = GetGameTimer()
+    local careState = saleCareState[vehicle] or {}
+    local cooldown = math.max(0, tonumber(care.eventCooldownMs or care.eventRepairMs) or 250)
+    if now < (careState.nextEventRepairAt or 0) then return end
+
+    careState.nextEventRepairAt = now + cooldown
+    saleCareState[vehicle] = careState
+    maintainSalePresentation(vehicle, true)
+
+    local visualRepairDelay = math.max(0, tonumber(care.visualRepairDelayMs or care.decalCleanupDelayMs) or 150)
+    if visualRepairDelay > 0 then
+        SetTimeout(visualRepairDelay, function()
+            if DoesEntityExist(vehicle) and saleVehicles[vehicle] then
+                maintainSalePresentation(vehicle, true)
+            end
+        end)
     end
 end
 
@@ -783,25 +643,6 @@ local function getDuiScanInterval(scanState)
     end
 
     return far
-end
-
-local function getSignPlacementConfig(entity)
-    local placement = Config.Sign.placement
-    local override
-
-    if entity and entity ~= 0 and DoesEntityExist(entity) and GetVehicleClass then
-        local class = GetVehicleClass(entity)
-        override = CarSale.GetVehicleClassConfig(placement.classOverrides, class)
-    end
-
-    return override or placement
-end
-
-local function getDefaultSignSize(placement)
-    placement = placement or Config.Sign.placement
-    local base = placement.baseSize or Config.Sign.placement.baseSize
-    local scale = tonumber(placement.scale or Config.Sign.placement.scale) or 1.0
-    return base.x * scale, base.y * scale
 end
 
 local function getDuiDataKey(data)
@@ -985,8 +826,8 @@ end
 local function getDuiPlacement(entity)
     local data = getSaleData(entity)
     local placement = data and data.placement or nil
-    local placementConfig = getSignPlacementConfig(entity)
-    local width, height = getDefaultSignSize(placementConfig)
+    local placementConfig = CarSale.GetSignPlacementConfig(entity)
+    local width, height = CarSale.GetDefaultSignSize(placementConfig)
     local offset = placementConfig.offset or Config.Sign.placement.offset
     local tilt = placementConfig.tilt or Config.Sign.placement.tilt
 
@@ -1025,7 +866,7 @@ local function getEntityBasis(entity)
 end
 
 local function getDuiAnchorCoords(entity, placementConfig)
-    local placement = placementConfig or getSignPlacementConfig(entity)
+    local placement = placementConfig or CarSale.GetSignPlacementConfig(entity)
     if type(placement.anchorBones) == 'table' then
         local model = GetEntityModel(entity)
         local boneIndex = duiAnchorBoneCache[model]
@@ -1066,7 +907,7 @@ end
 local function getDuiGeometry(entity, placement)
     placement = placement or getDuiPlacement(entity)
 
-    local anchorCoords = getDuiAnchorCoords(entity, getSignPlacementConfig(entity))
+    local anchorCoords = getDuiAnchorCoords(entity, CarSale.GetSignPlacementConfig(entity))
     local basis = getEntityBasis(entity)
     local halfWidth = placement.width * 0.5
     local halfHeight = placement.height * 0.5
@@ -1231,8 +1072,16 @@ local function trackSaleVehicle(entity, data)
     data = data and normalizeSaleData(data) or getSaleData(entity, true)
     if not data then return false end
 
+    local isNew = saleVehicles[entity] == nil
     saleVehicles[entity] = data
     if registerSaleVehicleTarget then registerSaleVehicleTarget(entity) end
+
+    if isNew then
+        saleDoorStates[entity] = saleDoorStates[entity] or captureDoorState(entity)
+        applySaleLock(entity)
+        maintainSalePresentation(entity, true)
+    end
+
     return true
 end
 
@@ -1817,7 +1666,7 @@ local buyerSaleTargetOptions = {
                     },
                 }
 
-                if phoneContactsEnabled() and details.phone ~= 'Unknown' then
+                if CarSale.PhoneContactsEnabled() and details.phone ~= 'Unknown' then
                     options[#options + 1] = {
                         title = 'Save Contact',
                         icon = 'fa-solid fa-address-book',
@@ -2088,8 +1937,8 @@ AddStateBagChangeHandler('carSale', nil, function(bagName, _, value)
     if not entity or entity == 0 or not IsEntityAVehicle(entity) then return end
     clearTargetSaleState(entity)
     if value then
-        CreateThread(function()
-            Wait(100)
+        SetTimeout(100, function()
+            if not DoesEntityExist(entity) or Entity(entity).state.carSale ~= true then return end
             trackSaleVehicle(entity)
             saleDoorStates[entity] = saleDoorStates[entity] or captureDoorState(entity)
             applySaleLock(entity)
@@ -2125,27 +1974,22 @@ AddStateBagChangeHandler('carSaleData', nil, function(bagName, _, value)
     end
 end)
 
+AddEventHandler('gameEventTriggered', function(eventName, args)
+    if eventName ~= 'CEventNetworkEntityDamage' or type(args) ~= 'table' then return end
+
+    local vehicle = args[1]
+    if vehicle and vehicle ~= 0 then
+        markSaleVehicleDamaged(vehicle)
+    end
+end)
+
+AddEventHandler('entityDamaged', function(victim)
+    markSaleVehicleDamaged(victim)
+end)
+
 CreateThread(function()
     registerTargets()
 end)
-
-local function runVehicleCare(snapshot)
-    local care = Config.Listing.vehicleCare
-    if not care.keepClean and not care.keepWindowsFixed and not care.preventDisplayDamage then
-        return false
-    end
-
-    local hasNearby = false
-    local limit = care.distance or 60.0
-    local limitSquared = limit * limit
-    for _, tracked in ipairs(snapshot) do
-        if tracked.distanceSquared <= limitSquared then
-            hasNearby = true
-            maintainSalePresentation(tracked.entity)
-        end
-    end
-    return hasNearby
-end
 
 local function updateSaleBlips(snapshot)
     if not Config.Blip.enabled then
@@ -2203,11 +2047,9 @@ CreateThread(function()
         and (Config.Listing.saleVehicleDiscoveryMs or 15000)
         or (Config.Listing.saleVehicleDiscoveryIdleMs or 60000))
     local nextDui = now
-    local nextCare = now
     local nextBlip = now
     local nextMetrics = now + (Config.Optimization.metricsIntervalMs or 60000)
     local duiScanState = 'far'
-    local hasNearbyCare = false
     local hasNearbyBlips = false
 
     while true do
@@ -2221,20 +2063,14 @@ CreateThread(function()
         end
 
         local runDui = now >= nextDui
-        local runCare = now >= nextCare
         local runBlips = now >= nextBlip
-        if runDui or runCare or runBlips then
+        if runDui or runBlips then
             local pedCoords = GetEntityCoords(PlayerPedId())
             local snapshot = buildTrackedVehicleSnapshot(pedCoords)
 
             if runDui then
                 duiScanState = rebuildDuiAssignments(pedCoords, snapshot)
                 nextDui = now + getDuiScanInterval(duiScanState)
-            end
-            if runCare then
-                hasNearbyCare = runVehicleCare(snapshot)
-                nextCare = now + (hasNearbyCare and Config.Listing.vehicleCare.intervalMs
-                    or (Config.Listing.vehicleCare.farIntervalMs or 5000))
             end
             if runBlips then
                 hasNearbyBlips = updateSaleBlips(snapshot)
@@ -2250,15 +2086,15 @@ CreateThread(function()
 
         if now >= nextMetrics then
             if Config.Optimization.metrics then
-                runtimeMetrics.trackedVehicles = countEntries(saleVehicles)
-                runtimeMetrics.activeSigns = countEntries(duiSigns)
+                runtimeMetrics.trackedVehicles = CarSale.CountEntries(saleVehicles)
+                runtimeMetrics.activeSigns = CarSale.CountEntries(duiSigns)
                 runtimeMetrics.duiPoolSize = #duiPool
                 print(('[car-sales] client metrics %s'):format(json.encode(runtimeMetrics)))
             end
             nextMetrics = now + (Config.Optimization.metricsIntervalMs or 60000)
         end
 
-        local wakeAt = math.min(nextDiscovery, nextDui, nextCare, nextBlip, nextMetrics)
+        local wakeAt = math.min(nextDiscovery, nextDui, nextBlip, nextMetrics)
         Wait(clamp(wakeAt - GetGameTimer(), 100, 5000))
     end
 end)

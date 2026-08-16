@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'Feakz'
 description 'Physical player-to-player vehicle sale signs'
-version '1.1.4'
+version '1.1.5'
 
 lua54 'yes'
 ui_page 'html/sign.html'
@@ -12,6 +12,7 @@ shared_scripts {
     '@ox_lib/init.lua',
     'config.lua',
     'shared/utils.lua',
+    'shared/config_runtime.lua',
     'shared/vehicle_properties.lua'
 }
 

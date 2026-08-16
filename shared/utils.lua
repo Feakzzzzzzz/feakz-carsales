@@ -189,6 +189,34 @@ function CarSale.GetVehicleClassConfig(configs, class)
     return nil
 end
 
+function CarSale.CountEntries(value)
+    local count = 0
+    for _ in pairs(value or {}) do count = count + 1 end
+    return count
+end
+
+function CarSale.PhoneContactsEnabled()
+    local phone = Config.Phone or {}
+    if phone.saveContacts ~= nil then return phone.saveContacts == true end
+    return not phone.contact or phone.contact.enabled ~= false
+end
+
+function CarSale.GetSignPlacementConfig(vehicle)
+    local placement = Config.Sign.placement
+    if not vehicle or vehicle == 0 or not GetVehicleClass then return placement end
+    if DoesEntityExist and not DoesEntityExist(vehicle) then return placement end
+
+    local class = GetVehicleClass(vehicle)
+    return CarSale.GetVehicleClassConfig(placement.classOverrides, class) or placement
+end
+
+function CarSale.GetDefaultSignSize(placement)
+    placement = placement or Config.Sign.placement
+    local base = placement.baseSize or Config.Sign.placement.baseSize
+    local scale = tonumber(placement.scale or Config.Sign.placement.scale) or 1.0
+    return base.x * scale, base.y * scale
+end
+
 function CarSale.DecodeJson(value, fallback)
     if type(value) == 'table' then return value end
     if type(value) ~= 'string' or value == '' then return fallback end

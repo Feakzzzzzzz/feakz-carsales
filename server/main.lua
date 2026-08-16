@@ -91,12 +91,6 @@ local function incrementMetric(name, amount)
     serverMetrics[name] = (serverMetrics[name] or 0) + (amount or 1)
 end
 
-local function countEntries(value)
-    local count = 0
-    for _ in pairs(value) do count = count + 1 end
-    return count
-end
-
 local function rateLimited(src, action)
     local now = GetGameTimer()
     rateLimits[src] = rateLimits[src] or {}
@@ -163,28 +157,9 @@ local function playerNearListing(src, listing, distance)
     return CarSale.VectorDistance(coords, GetEntityCoords(vehicle)) <= distance
 end
 
-local function getSignPlacementConfig(vehicle)
-    local placement = Config.Sign.placement
-    local override
-
-    if vehicle and vehicle ~= 0 and GetVehicleClass then
-        local class = GetVehicleClass(vehicle)
-        override = CarSale.GetVehicleClassConfig(placement.classOverrides, class)
-    end
-
-    return override or placement
-end
-
-local function getDefaultSignSize(placement)
-    placement = placement or Config.Sign.placement
-    local base = placement.baseSize or Config.Sign.placement.baseSize
-    local scale = tonumber(placement.scale or Config.Sign.placement.scale) or 1.0
-    return base.x * scale, base.y * scale
-end
-
 local function getDefaultSignPlacement(vehicle)
-    local placement = getSignPlacementConfig(vehicle)
-    local width, height = getDefaultSignSize(placement)
+    local placement = CarSale.GetSignPlacementConfig(vehicle)
+    local width, height = CarSale.GetDefaultSignSize(placement)
     local offset = placement.offset or Config.Sign.placement.offset
 
     return {
@@ -221,12 +196,6 @@ local function sanitizeSignPlacement(raw, vehicle)
         height = clampPlacementValue(raw.height, ranges.height, base.height),
         tilt = clampPlacementValue(raw.tilt, ranges.tilt, base.tilt)
     }
-end
-
-local function phoneContactsEnabled()
-    local phone = Config.Phone or {}
-    if phone.saveContacts ~= nil then return phone.saveContacts == true end
-    return not phone.contact or phone.contact.enabled ~= false
 end
 
 local function normalizeStoragePlate(plate)
@@ -781,6 +750,7 @@ RegisterNetEvent('car-sales:server:createListing', function(vehicleNetId, price,
     releaseListingReservation(originalPlate, netId, true)
 
     setVehicleState(listing, true)
+    TriggerClientEvent('car-sales:client:lockVehicle', src, netId)
     incrementMetric('listingsCreated')
     CarSale.Notify(src, Config.Notifications.title, ('Vehicle listed for %s.'):format(CarSale.FormatMoney(price)), 'success')
 end)
@@ -861,7 +831,7 @@ end)
 RegisterNetEvent('car-sales:server:saveSellerContact', function(listingId)
     local src = source
     if rateLimited(src, 'saveSellerContact') then return end
-    if not phoneContactsEnabled() then return end
+    if not CarSale.PhoneContactsEnabled() then return end
 
     local listing = listings[tonumber(listingId)]
     if not listing then
@@ -1782,10 +1752,10 @@ CreateThread(function()
 
         if now >= nextMetrics then
             if Config.Optimization.metrics then
-                serverMetrics.activeListings = countEntries(listings)
-                serverMetrics.pendingOffers = countEntries(pendingOffers)
-                serverMetrics.activeTestDrives = countEntries(activeTestDrives)
-                serverMetrics.activeTransactions = countEntries(activeTransactions)
+                serverMetrics.activeListings = CarSale.CountEntries(listings)
+                serverMetrics.pendingOffers = CarSale.CountEntries(pendingOffers)
+                serverMetrics.activeTestDrives = CarSale.CountEntries(activeTestDrives)
+                serverMetrics.activeTransactions = CarSale.CountEntries(activeTransactions)
                 print(('[car-sales] server metrics %s'):format(json.encode(serverMetrics)))
             end
             nextMetrics = now + math.max(1, math.floor((Config.Optimization.metricsIntervalMs or 60000) / 1000))
