@@ -181,7 +181,9 @@ Config = applyDefaults(Config, {
             keepWindowsInvincible = true,
             cleanThreshold = 0.1,
             eventCooldownMs = 250,
-            visualRepairDelayMs = 150
+            visualRepairDelayMs = 150,
+            cosmeticRefreshMs = 2000,
+            cosmeticRefreshDistance = 60.0
         }
     },
     Sign = {

@@ -34,7 +34,7 @@ Config.Listing = {
     minPrice = 100,
     maxPrice = 10000000,
 
-    -- Event-driven protection; no periodic vehicle-care loop.
+    -- Event protection with a lightweight cosmetic refresh for collision scratches.
     vehicleCare = {
         keepClean = true,            -- Keep listed vehicles clean.
         keepWindowsFixed = true,     -- Repair broken windows when the vehicle is listed or damaged.

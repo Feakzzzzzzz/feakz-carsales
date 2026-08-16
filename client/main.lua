@@ -1137,6 +1137,19 @@ local function buildTrackedVehicleSnapshot(pedCoords)
     return snapshot
 end
 
+local function refreshNearbySaleVehicleCosmetics(snapshot)
+    local care = Config.Listing.vehicleCare
+    if not care.preventDisplayDamage then return end
+
+    local distance = math.max(0.0, tonumber(care.cosmeticRefreshDistance) or 60.0)
+    local maxDistanceSquared = distance * distance
+    for _, tracked in ipairs(snapshot) do
+        if tracked.distanceSquared <= maxDistanceSquared then
+            maintainSalePresentation(tracked.entity, true)
+        end
+    end
+end
+
 local function insertNearestCandidate(candidates, candidate, limit)
     local insertAt = #candidates + 1
     for i = 1, #candidates do
@@ -2048,6 +2061,7 @@ CreateThread(function()
         or (Config.Listing.saleVehicleDiscoveryIdleMs or 60000))
     local nextDui = now
     local nextBlip = now
+    local nextCosmeticRefresh = now
     local nextMetrics = now + (Config.Optimization.metricsIntervalMs or 60000)
     local duiScanState = 'far'
     local hasNearbyBlips = false
@@ -2064,7 +2078,8 @@ CreateThread(function()
 
         local runDui = now >= nextDui
         local runBlips = now >= nextBlip
-        if runDui or runBlips then
+        local runCosmeticRefresh = now >= nextCosmeticRefresh
+        if runDui or runBlips or runCosmeticRefresh then
             local pedCoords = GetEntityCoords(PlayerPedId())
             local snapshot = buildTrackedVehicleSnapshot(pedCoords)
 
@@ -2076,6 +2091,13 @@ CreateThread(function()
                 hasNearbyBlips = updateSaleBlips(snapshot)
                 nextBlip = now + (hasNearbyBlips and Config.Blip.scanIntervalMs
                     or (Config.Blip.farScanIntervalMs or 5000))
+            end
+            if runCosmeticRefresh then
+                refreshNearbySaleVehicleCosmetics(snapshot)
+                local careInterval = next(saleVehicles)
+                    and (Config.Listing.vehicleCare.cosmeticRefreshMs or 2000)
+                    or (Config.Blip.farScanIntervalMs or 5000)
+                nextCosmeticRefresh = now + math.max(250, tonumber(careInterval) or 2000)
             end
         end
 
@@ -2094,7 +2116,7 @@ CreateThread(function()
             nextMetrics = now + (Config.Optimization.metricsIntervalMs or 60000)
         end
 
-        local wakeAt = math.min(nextDiscovery, nextDui, nextBlip, nextMetrics)
+        local wakeAt = math.min(nextDiscovery, nextDui, nextBlip, nextCosmeticRefresh, nextMetrics)
         Wait(clamp(wakeAt - GetGameTimer(), 100, 5000))
     end
 end)
